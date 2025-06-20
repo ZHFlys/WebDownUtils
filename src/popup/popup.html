@@ -133,47 +133,7 @@
         </div>
     </div>
     
-    <!-- 独立预览弹窗 -->
-    <div class="preview-modal" id="preview-modal" style="display: none;">
-        <div class="preview-backdrop" id="preview-backdrop"></div>
-        <div class="preview-panel">
-            <div class="preview-header">
-                <div class="preview-title">
-                    <span class="preview-icon">📋</span>
-                    <h3>文件预览</h3>
-                </div>
-                <div class="preview-controls">
-                    <span id="preview-count">已选择 0 个文件</span>
-                    <button class="close-btn" id="close-preview">✕</button>
-                </div>
-            </div>
-            
-            <div class="preview-filters">
-                <div class="filter-group">
-                    <button class="filter-btn active" data-filter="all">全部</button>
-                    <button class="filter-btn" data-filter="image">图片</button>
-                    <button class="filter-btn" data-filter="video">视频</button>
-                    <button class="filter-btn" data-filter="document">文档</button>
-                </div>
-                <div class="preview-actions">
-                    <button class="action-btn-small" id="select-all">全选</button>
-                    <button class="action-btn-small" id="select-none">全不选</button>
-                </div>
-            </div>
-            
-            <div class="file-list" id="file-list">
-                <!-- 文件项会动态添加到这里 -->
-            </div>
-            
-            <div class="preview-footer">
-                <button class="action-btn secondary" id="cancel-download">取消</button>
-                <button class="action-btn primary" id="confirm-download">
-                    <span class="btn-icon">⬇️</span>
-                    开始下载 (<span id="download-count">0</span>)
-                </button>
-            </div>
-        </div>
-    </div>
+
     
     <script src="popup.js"></script>
 </body>

@@ -70,18 +70,18 @@ def main():
     print(f"📁 输出目录: {icons_dir}")
     print("")
     
-    # 定义需要生成的尺寸
+    # 从32px开始生成图标
     sizes = {
-        "icon16.png": 16,
-        "icon32.png": 32, 
+        "icon32.png": 32,
         "icon48.png": 48,
-        "icon128.png": 128
+        "icon128.png": 128,
+        "icon256.png": 256
     }
     
     success_count = 0
     total_count = len(sizes)
     
-    print("🔄 开始转换...")
+    print("🔄 开始转换图标（32px-256px）...")
     print("")
     
     # 转换每个尺寸
@@ -117,7 +117,8 @@ def main():
         print("⚠️  部分图标生成失败，请检查错误信息")
     
     print("")
-    print("💡 提示：生成的PNG图标会保持SVG原有的蓝紫色渐变效果")
+    print("💡 提示：从32px开始生成图标，优化小尺寸显示效果")
+    print("💡 云朵设计增加了内边距，视觉层次更清晰")
 
 if __name__ == "__main__":
     main() 

@@ -16,6 +16,7 @@ class WebDownloadHelper {
         await this.loadSettings();
         await this.getCurrentTab();
         this.setupEventListeners();
+        this.setupMessageListeners();
         this.detectPlatform();
         this.updateUI();
     }
@@ -40,6 +41,18 @@ class WebDownloadHelper {
         
         const stored = await chrome.storage.sync.get(defaultSettings);
         this.settings = stored;
+    }
+    
+    setupMessageListeners() {
+        // 监听来自content script的消息
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            switch (request.action) {
+                case 'startDownload':
+                    this.startDownloadFromPreview(request.selectedFiles);
+                    sendResponse({ success: true });
+                    break;
+            }
+        });
     }
     
     async saveSettings() {
@@ -141,37 +154,9 @@ class WebDownloadHelper {
             this.openPreviewFromSettings();
         });
         
-        // 预览区域事件监听
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.switchFilter(e.target.dataset.filter);
-            });
-        });
+
         
-        document.getElementById('select-all').addEventListener('click', () => {
-            this.selectAllFiles();
-        });
-        
-        document.getElementById('select-none').addEventListener('click', () => {
-            this.selectNoFiles();
-        });
-        
-        document.getElementById('cancel-download').addEventListener('click', () => {
-            this.hidePreview();
-        });
-        
-        document.getElementById('confirm-download').addEventListener('click', () => {
-            this.startDownload();
-        });
-        
-        // 弹窗关闭事件
-        document.getElementById('close-preview').addEventListener('click', () => {
-            this.hidePreview();
-        });
-        
-        document.getElementById('preview-backdrop').addEventListener('click', () => {
-            this.hidePreview();
-        });
+
     }
     
     switchTab(tabName) {
@@ -310,181 +295,49 @@ class WebDownloadHelper {
     }
     
     showPreview() {
-        // 隐藏进度区域，显示预览弹窗
+        // 隐藏进度区域
         this.showProgress(false);
-        document.getElementById('preview-modal').style.display = 'flex';
         
-        this.updatePreviewStats();
-        this.renderFileList();
+        // 发送消息给content script显示预览面板
+        chrome.tabs.sendMessage(this.currentTab.id, {
+            action: 'showPreview',
+            files: this.foundFiles,
+            selectedFiles: this.selectedFiles
+        });
         
-        // 阻止主窗口滚动
-        document.body.style.overflow = 'hidden';
+        // 关闭popup
+        window.close();
     }
     
     hidePreview() {
-        document.getElementById('preview-modal').style.display = 'none';
+        // 发送消息给content script隐藏预览面板
+        chrome.tabs.sendMessage(this.currentTab.id, {
+            action: 'hidePreview'
+        });
+        
         this.foundFiles = [];
         this.selectedFiles = [];
-        
-        // 恢复主窗口滚动
-        document.body.style.overflow = 'auto';
     }
     
-    updatePreviewStats() {
-        const count = this.selectedFiles.length;
-        document.getElementById('preview-count').textContent = `已选择 ${count} 个文件`;
-        document.getElementById('download-count').textContent = count;
-        
-        // 更新下载按钮状态
-        const confirmBtn = document.getElementById('confirm-download');
-        confirmBtn.disabled = count === 0;
-        if (count === 0) {
-            confirmBtn.style.opacity = '0.5';
-            confirmBtn.style.cursor = 'not-allowed';
-        } else {
-            confirmBtn.style.opacity = '1';
-            confirmBtn.style.cursor = 'pointer';
-        }
-    }
+
     
-    renderFileList() {
-        const fileList = document.getElementById('file-list');
-        fileList.innerHTML = '';
-        
-        const filteredFiles = this.getFilteredFiles();
-        
-        if (filteredFiles.length === 0) {
-            fileList.className = 'file-list empty';
-            fileList.innerHTML = '<div>没有找到符合条件的文件</div>';
-            return;
-        }
-        
-        fileList.className = 'file-list';
-        filteredFiles.forEach((file, index) => {
-            const fileItem = this.createFileItem(file, index);
-            fileList.appendChild(fileItem);
-        });
-    }
-    
-    getFilteredFiles() {
-        if (this.currentFilter === 'all') {
-            return this.foundFiles;
-        }
-        return this.foundFiles.filter(file => file.type === this.currentFilter);
-    }
-    
-    createFileItem(file, index) {
-        const item = document.createElement('div');
-        item.className = 'file-item';
-        
-        const isSelected = this.selectedFiles.includes(file);
-        
-        item.innerHTML = `
-            <div class="file-checkbox">
-                <input type="checkbox" ${isSelected ? 'checked' : ''} data-index="${index}">
-            </div>
-            <div class="file-info">
-                <div class="file-type-icon ${file.type}">
-                    ${this.getTypeIcon(file.type)}
-                </div>
-                <div class="file-details">
-                    <div class="file-name">${file.name || 'unnamed'}</div>
-                    <div class="file-url">${file.url}</div>
-                </div>
-                <div class="file-size">${this.formatFileSize(file.size)}</div>
-            </div>
-        `;
-        
-        // 添加复选框事件监听
-        const checkbox = item.querySelector('input[type="checkbox"]');
-        checkbox.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                if (!this.selectedFiles.includes(file)) {
-                    this.selectedFiles.push(file);
-                }
-            } else {
-                const fileIndex = this.selectedFiles.indexOf(file);
-                if (fileIndex > -1) {
-                    this.selectedFiles.splice(fileIndex, 1);
-                }
-            }
-            this.updatePreviewStats();
-        });
-        
-        return item;
-    }
-    
-    getTypeIcon(type) {
-        switch (type) {
-            case 'image': return '🖼️';
-            case 'video': return '🎥';
-            case 'document': return '📄';
-            default: return '📁';
-        }
-    }
-    
-    formatFileSize(size) {
-        if (!size) return '未知';
-        if (size < 1024) return size + 'B';
-        if (size < 1024 * 1024) return (size / 1024).toFixed(1) + 'KB';
-        return (size / (1024 * 1024)).toFixed(1) + 'MB';
-    }
-    
-    switchFilter(filter) {
-        this.currentFilter = filter;
-        
-        // 更新按钮状态
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.filter === filter);
-        });
-        
-        this.renderFileList();
-    }
-    
-    selectAllFiles() {
-        const filteredFiles = this.getFilteredFiles();
-        filteredFiles.forEach(file => {
-            if (!this.selectedFiles.includes(file)) {
-                this.selectedFiles.push(file);
-            }
-        });
-        this.updatePreviewStats();
-        this.renderFileList();
-    }
-    
-    selectNoFiles() {
-        const filteredFiles = this.getFilteredFiles();
-        filteredFiles.forEach(file => {
-            const fileIndex = this.selectedFiles.indexOf(file);
-            if (fileIndex > -1) {
-                this.selectedFiles.splice(fileIndex, 1);
-            }
-        });
-        this.updatePreviewStats();
-        this.renderFileList();
-    }
-    
-    async startDownload() {
-        if (this.selectedFiles.length === 0) {
+    async startDownloadFromPreview(selectedFiles) {
+        if (!selectedFiles || selectedFiles.length === 0) {
             this.showNotification('请至少选择一个文件', 'warning');
             return;
         }
         
-        // 隐藏预览，显示进度
-        this.hidePreview();
         this.showProgress(true);
-        
-        const files = this.selectedFiles;
-        this.updateProgress('开始下载...', 0, files.length);
+        this.updateProgress('开始下载...', 0, selectedFiles.length);
         
         let successCount = 0;
         let failCount = 0;
         
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
             
             try {
-                this.updateProgress(`正在下载: ${file.name}`, i, files.length);
+                this.updateProgress(`正在下载: ${file.name}`, i, selectedFiles.length);
                 
                 const filename = this.generateFilename(file, i);
                 const folder = this.settings.createFolders ? this.getFolderName() : '';
@@ -506,14 +359,17 @@ class WebDownloadHelper {
             await this.delay(200);
         }
         
-        this.updateProgress('下载完成', files.length, files.length);
+        this.updateProgress('下载完成', selectedFiles.length, selectedFiles.length);
         this.showNotification(`下载完成！成功: ${successCount}, 失败: ${failCount}`, 'success');
+        
+        // 通知content script隐藏预览
+        chrome.tabs.sendMessage(this.currentTab.id, {
+            action: 'hidePreview'
+        });
         
         // 重置状态
         setTimeout(() => {
             this.showProgress(false);
-            this.foundFiles = [];
-            this.selectedFiles = [];
         }, 2000);
     }
     

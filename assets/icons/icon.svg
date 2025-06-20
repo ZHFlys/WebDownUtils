@@ -14,28 +14,38 @@
     
     <!-- 阴影滤镜 -->
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+      <feDropShadow dx="3" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    
+    <!-- 内部阴影滤镜 -->
+    <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
     </filter>
   </defs>
   
-  <!-- 圆形背景 -->
-  <circle cx="64" cy="64" r="56" fill="url(#bgGradient)" filter="url(#shadow)"/>
+  <!-- 正方形背景 - 保持大小 -->
+  <rect x="8" y="8" width="112" height="112" rx="20" ry="20" fill="url(#bgGradient)" filter="url(#shadow)"/>
   
-  <!-- 云朵形状（代表网页） -->
-  <path d="M30 45 C25 45, 20 50, 20 55 C20 60, 25 65, 30 65 L90 65 C95 65, 100 60, 100 55 C100 50, 95 45, 90 45 C88 40, 83 35, 75 35 C67 35, 62 40, 60 45 Z" 
-        fill="#ffffff" opacity="0.9"/>
+  <!-- 云朵形状（代表网页）- 增加内边距，向里收缩 -->
+  <path d="M28 36 C20 36, 12 42, 12 48 C12 54, 20 60, 28 60 L100 60 C108 60, 116 54, 116 48 C116 42, 108 36, 100 36 C96 28, 88 20, 76 20 C64 20, 56 28, 52 36 Z" 
+        fill="#ffffff" opacity="0.95" filter="url(#innerShadow)"/>
   
-  <!-- 下载箭头主体 -->
-  <rect x="60" y="50" width="8" height="30" fill="url(#arrowGradient)" rx="2"/>
+  <!-- 下载箭头主体 - 保持大小 -->
+  <rect x="56" y="42" width="16" height="45" fill="url(#arrowGradient)" rx="4"/>
   
-  <!-- 箭头头部 -->
-  <path d="M50 75 L64 90 L78 75 Z" fill="url(#arrowGradient)"/>
+  <!-- 箭头头部 - 保持大小 -->
+  <path d="M38 80 L64 106 L90 80 Z" fill="url(#arrowGradient)" filter="url(#innerShadow)"/>
   
-  <!-- 底部横线（代表文件夹） -->
-  <rect x="35" y="95" width="58" height="6" fill="#ffffff" opacity="0.8" rx="3"/>
+  <!-- 底部横线（代表文件夹）- 相应调整 -->
+  <rect x="32" y="112" width="64" height="8" fill="#ffffff" opacity="0.95" rx="4"/>
   
-  <!-- 装饰性小点 -->
-  <circle cx="45" cy="52" r="2" fill="#ffffff" opacity="0.6"/>
-  <circle cx="83" cy="52" r="2" fill="#ffffff" opacity="0.6"/>
-  <circle cx="64" cy="48" r="1.5" fill="#ffffff" opacity="0.7"/>
+  <!-- 装饰性小点 - 调整位置 -->
+  <circle cx="42" cy="46" r="2.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="86" cy="46" r="2.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="64" cy="38" r="2" fill="#ffffff" opacity="0.9"/>
+  
+  <!-- 添加装饰性元素 -->
+  <circle cx="74" cy="50" r="1.8" fill="#ffffff" opacity="0.6"/>
+  <circle cx="54" cy="50" r="1.8" fill="#ffffff" opacity="0.6"/>
+  <circle cx="64" cy="54" r="1.5" fill="#ffffff" opacity="0.7"/>
 </svg> 
