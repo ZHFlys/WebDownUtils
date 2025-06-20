@@ -1,0 +1,30 @@
+{
+  "name": "web-download-helper",
+  "version": "1.0.0",
+  "description": "智能批量下载工具，支持整页、区域选择和特定平台优化下载",
+  "author": "Your Name",
+  "license": "MIT",
+  "keywords": [
+    "chrome-extension",
+    "download",
+    "batch-download",
+    "xiaohongshu",
+    "web-scraping"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/WebDownUtils.git"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/dev.js",
+    "lint": "eslint src/",
+    "package": "node scripts/package.js"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+} 

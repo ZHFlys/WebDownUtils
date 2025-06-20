@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web批量下载助手</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="../../assets/icons/icon32.png" alt="logo" class="logo">
+            <h1>批量下载助手</h1>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="download">下载模式</button>
+            <button class="tab-btn" data-tab="settings">设置</button>
+        </div>
+        
+        <div class="tab-content" id="download-tab">
+            <div class="download-modes">
+                <div class="mode-card" id="full-page-mode">
+                    <div class="mode-icon">🌐</div>
+                    <h3>整页下载</h3>
+                    <p>下载当前页面所有图片和文件</p>
+                    <button class="mode-btn" data-mode="full-page">开始下载</button>
+                </div>
+                
+                <div class="mode-card" id="area-select-mode">
+                    <div class="mode-icon">🔲</div>
+                    <h3>区域选择</h3>
+                    <p>选择页面特定区域进行下载</p>
+                    <button class="mode-btn" data-mode="area-select">选择区域</button>
+                </div>
+                
+                <div class="mode-card" id="platform-mode">
+                    <div class="mode-icon">📱</div>
+                    <h3>平台优化</h3>
+                    <p>针对小红书等平台的智能下载</p>
+                    <button class="mode-btn" data-mode="platform">智能识别</button>
+                </div>
+            </div>
+            
+            <div class="current-platform" id="platform-info">
+                <span class="platform-name">当前平台：<span id="detected-platform">检测中...</span></span>
+            </div>
+            
+            <div class="download-options">
+                <div class="option-group">
+                    <label>
+                        <input type="checkbox" id="include-images" checked>
+                        <span class="checkmark"></span>
+                        包含图片
+                    </label>
+                </div>
+                <div class="option-group">
+                    <label>
+                        <input type="checkbox" id="include-videos" checked>
+                        <span class="checkmark"></span>
+                        包含视频
+                    </label>
+                </div>
+                <div class="option-group">
+                    <label>
+                        <input type="checkbox" id="include-documents">
+                        <span class="checkmark"></span>
+                        包含文档
+                    </label>
+                </div>
+            </div>
+            
+            <!-- 下载进度区域 -->
+            <div class="progress-section" id="progress-section" style="display: none;">
+                <div class="progress-info">
+                    <span id="progress-text">准备下载...</span>
+                    <span id="progress-count">0/0</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="settings-tab" style="display: none;">
+            <div class="settings-section">
+                <h3>保存设置</h3>
+                <div class="setting-item">
+                    <label for="save-path">默认保存路径：</label>
+                    <input type="text" id="save-path" placeholder="Downloads/WebDownUtils">
+                </div>
+                <div class="setting-item">
+                    <label for="file-naming">文件命名规则：</label>
+                    <select id="file-naming">
+                        <option value="original">保持原名</option>
+                        <option value="timestamp">时间戳前缀</option>
+                        <option value="sequential">序号前缀</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="create-folders">
+                        <span class="checkmark"></span>
+                        按网站创建文件夹
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="auto-detect-platform">
+                        <span class="checkmark"></span>
+                        自动检测平台
+                    </label>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h3>下载限制</h3>
+                <div class="setting-item">
+                    <label for="max-files">最大文件数：</label>
+                    <input type="number" id="max-files" value="50" min="1" max="1000">
+                </div>
+                <div class="setting-item">
+                    <label for="file-size-limit">单文件大小限制(MB)：</label>
+                    <input type="number" id="file-size-limit" value="100" min="1" max="1000">
+                </div>
+            </div>
+            
+            <div class="settings-actions">
+                <button id="save-settings" class="action-btn primary">保存设置</button>
+                <button id="reset-settings" class="action-btn secondary">重置</button>
+                <button id="preview-files" class="action-btn secondary">预览文件</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 独立预览弹窗 -->
+    <div class="preview-modal" id="preview-modal" style="display: none;">
+        <div class="preview-backdrop" id="preview-backdrop"></div>
+        <div class="preview-panel">
+            <div class="preview-header">
+                <div class="preview-title">
+                    <span class="preview-icon">📋</span>
+                    <h3>文件预览</h3>
+                </div>
+                <div class="preview-controls">
+                    <span id="preview-count">已选择 0 个文件</span>
+                    <button class="close-btn" id="close-preview">✕</button>
+                </div>
+            </div>
+            
+            <div class="preview-filters">
+                <div class="filter-group">
+                    <button class="filter-btn active" data-filter="all">全部</button>
+                    <button class="filter-btn" data-filter="image">图片</button>
+                    <button class="filter-btn" data-filter="video">视频</button>
+                    <button class="filter-btn" data-filter="document">文档</button>
+                </div>
+                <div class="preview-actions">
+                    <button class="action-btn-small" id="select-all">全选</button>
+                    <button class="action-btn-small" id="select-none">全不选</button>
+                </div>
+            </div>
+            
+            <div class="file-list" id="file-list">
+                <!-- 文件项会动态添加到这里 -->
+            </div>
+            
+            <div class="preview-footer">
+                <button class="action-btn secondary" id="cancel-download">取消</button>
+                <button class="action-btn primary" id="confirm-download">
+                    <span class="btn-icon">⬇️</span>
+                    开始下载 (<span id="download-count">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html> 
