@@ -1,24 +1,22 @@
-// 插件主要逻辑
+// 扩展弹窗脚本
 class WebDownloadHelper {
     constructor() {
         this.currentTab = null;
-        this.isDownloading = false;
-        this.downloadQueue = [];
-        this.settings = {};
-        this.foundFiles = [];
-        this.selectedFiles = [];
-        this.currentFilter = 'all';
-        
+        this.settings = {
+            savePath: 'Downloads/WebDownUtils',
+            fileNaming: 'original',
+            createFolders: true,
+            maxFiles: 50,
+            fileSizeLimit: 100
+        };
         this.init();
     }
     
     async init() {
-        await this.loadSettings();
         await this.getCurrentTab();
+        await this.loadSettings();
         this.setupEventListeners();
-        this.setupMessageListeners();
-        this.detectPlatform();
-        this.updateUI();
+        this.setupTabSwitching();
     }
     
     async getCurrentTab() {
@@ -26,111 +24,16 @@ class WebDownloadHelper {
         this.currentTab = tab;
     }
     
-    async loadSettings() {
-        const defaultSettings = {
-            savePath: 'Downloads/WebDownUtils',
-            fileNaming: 'original',
-            createFolders: true,
-            autoDetectPlatform: true,
-            maxFiles: 50,
-            fileSizeLimit: 100,
-            includeImages: true,
-            includeVideos: true,
-            includeDocuments: true
-        };
-        
-        const stored = await chrome.storage.sync.get(defaultSettings);
-        this.settings = stored;
-    }
-    
-    setupMessageListeners() {
-        // 监听来自content script的消息
-        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            switch (request.action) {
-                case 'startDownload':
-                    this.startDownloadFromPreview(request.selectedFiles);
-                    sendResponse({ success: true });
-                    break;
-            }
-        });
-    }
-    
-    async saveSettings() {
-        await chrome.storage.sync.set(this.settings);
-        this.showNotification('设置已保存', 'success');
-        
-        // 保存后自动打开一次预览
-        setTimeout(() => {
-            this.openPreviewFromSettings();
-        }, 500);
-    }
-    
-    async openPreviewFromSettings() {
-        // 模拟扫描页面获取文件
-        this.updateProgress('正在扫描页面...', 0, 0);
-        this.showProgress(true);
-        
-        try {
-            const response = await chrome.tabs.sendMessage(this.currentTab.id, {
-                action: 'scanPage',
-                settings: this.settings
-            });
-            
-            if (response && response.files && response.files.length > 0) {
-                await this.downloadFiles(response.files);
-            } else {
-                this.showProgress(false);
-                this.showNotification('未找到可下载的文件', 'warning');
-            }
-        } catch (error) {
-            this.showProgress(false);
-            this.showNotification('扫描页面时出错: ' + error.message, 'error');
-        }
-    }
-    
     setupEventListeners() {
-        // 标签页切换
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.switchTab(e.target.dataset.tab);
-            });
-        });
-        
         // 下载模式按钮
-        document.querySelectorAll('.mode-btn').forEach(btn => {
+        document.querySelectorAll('[data-mode]').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.handleDownloadMode(e.target.dataset.mode);
+                const mode = e.target.dataset.mode;
+                this.handleDownloadMode(mode);
             });
         });
         
-
-        
-        // 设置页面
-        document.getElementById('save-path').addEventListener('input', (e) => {
-            this.settings.savePath = e.target.value;
-        });
-        
-        document.getElementById('file-naming').addEventListener('change', (e) => {
-            this.settings.fileNaming = e.target.value;
-        });
-        
-        document.getElementById('create-folders').addEventListener('change', (e) => {
-            this.settings.createFolders = e.target.checked;
-        });
-        
-        document.getElementById('auto-detect-platform').addEventListener('change', (e) => {
-            this.settings.autoDetectPlatform = e.target.checked;
-        });
-        
-        document.getElementById('max-files').addEventListener('input', (e) => {
-            this.settings.maxFiles = parseInt(e.target.value);
-        });
-        
-        document.getElementById('file-size-limit').addEventListener('input', (e) => {
-            this.settings.fileSizeLimit = parseInt(e.target.value);
-        });
-        
-        // 设置按钮
+        // 设置相关按钮
         document.getElementById('save-settings').addEventListener('click', () => {
             this.saveSettings();
         });
@@ -139,67 +42,33 @@ class WebDownloadHelper {
             this.resetSettings();
         });
         
-        document.getElementById('preview-files').addEventListener('click', () => {
-            this.openPreviewFromSettings();
-        });
-        
-
-        
-
-    }
-    
-    switchTab(tabName) {
-        // 更新标签按钮状态
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tab === tabName);
-        });
-        
-        // 显示对应内容
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.style.display = content.id === `${tabName}-tab` ? 'block' : 'none';
+        // 主预览按钮
+        document.getElementById('preview-files-main').addEventListener('click', () => {
+            this.previewFiles();
         });
     }
     
-    async detectPlatform() {
-        if (!this.currentTab) return;
+    setupTabSwitching() {
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
         
-        const url = this.currentTab.url;
-        let platform = '通用网站';
-        
-        if (url.includes('xiaohongshu.com')) {
-            platform = '小红书';
-        } else if (url.includes('weibo.com')) {
-            platform = '微博';
-        } else if (url.includes('instagram.com')) {
-            platform = 'Instagram';
-        } else if (url.includes('twitter.com') || url.includes('x.com')) {
-            platform = 'Twitter/X';
-        } else if (url.includes('pinterest.com')) {
-            platform = 'Pinterest';
-        }
-        
-        document.getElementById('detected-platform').textContent = platform;
-    }
-    
-    updateUI() {
-        // 更新设置
-        document.getElementById('save-path').value = this.settings.savePath;
-        document.getElementById('file-naming').value = this.settings.fileNaming;
-        document.getElementById('create-folders').checked = this.settings.createFolders;
-        document.getElementById('auto-detect-platform').checked = this.settings.autoDetectPlatform;
-        document.getElementById('max-files').value = this.settings.maxFiles;
-        document.getElementById('file-size-limit').value = this.settings.fileSizeLimit;
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.dataset.tab;
+                
+                // 更新按钮状态
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // 更新内容显示
+                tabContents.forEach(content => {
+                    content.style.display = content.id === `${targetTab}-tab` ? 'block' : 'none';
+                });
+            });
+        });
     }
     
     async handleDownloadMode(mode) {
-        if (this.isDownloading) {
-            this.showNotification('下载正在进行中，请等待完成', 'warning');
-            return;
-        }
-        
-        this.isDownloading = true;
-        this.showProgress(true);
-        
         try {
             switch (mode) {
                 case 'full-page':
@@ -208,23 +77,18 @@ class WebDownloadHelper {
                 case 'area-select':
                     await this.startAreaSelection();
                     break;
-                case 'platform':
-                    await this.downloadWithPlatformOptimization();
-                    break;
+                default:
+                    console.warn('未知的下载模式:', mode);
             }
         } catch (error) {
-            console.error('下载出错:', error);
-            this.showNotification('下载出错: ' + error.message, 'error');
-        } finally {
-            this.isDownloading = false;
-            this.showProgress(false);
+            console.error('下载模式处理失败:', error);
+            this.showError('操作失败: ' + error.message);
         }
     }
     
     async downloadFullPage() {
         this.updateProgress('正在扫描页面...', 0, 0);
         
-        // 向content script发送消息
         const response = await chrome.tabs.sendMessage(this.currentTab.id, {
             action: 'scanPage',
             settings: this.settings
@@ -232,240 +96,194 @@ class WebDownloadHelper {
         
         if (response && response.files) {
             await this.downloadFiles(response.files);
+        } else {
+            this.showError('未找到可下载的文件');
         }
     }
     
     async startAreaSelection() {
-        // 激活区域选择模式
+        // 关闭弹窗
+        window.close();
+        
+        // 发送消息启动区域选择
         await chrome.tabs.sendMessage(this.currentTab.id, {
             action: 'startAreaSelection'
         });
-        
-        this.showNotification('请在页面上选择要下载的区域', 'info');
-        window.close(); // 关闭popup让用户选择
-    }
-    
-    async downloadWithPlatformOptimization() {
-        const url = this.currentTab.url;
-        let strategy = 'default';
-        
-        if (url.includes('xiaohongshu.com')) {
-            strategy = 'xiaohongshu';
-        }
-        
-        this.updateProgress('正在使用平台优化策略扫描...', 0, 0);
-        
-        const response = await chrome.tabs.sendMessage(this.currentTab.id, {
-            action: 'scanWithStrategy',
-            strategy: strategy,
-            settings: this.settings
-        });
-        
-        if (response && response.files) {
-            await this.downloadFiles(response.files);
-        }
     }
     
     async downloadFiles(files) {
         if (!files || files.length === 0) {
-            this.showNotification('未找到可下载的文件', 'warning');
+            this.showError('没有找到文件');
             return;
         }
         
-        // 保存找到的文件并显示预览
-        this.foundFiles = files.slice(0, this.settings.maxFiles);
-        this.selectedFiles = [...this.foundFiles]; // 默认全选
-        this.showPreview();
-    }
-    
-    showPreview() {
-        // 隐藏进度区域
-        this.showProgress(false);
+        this.updateProgress('开始下载...', 0, files.length);
         
-        // 发送消息给content script显示预览面板
-        chrome.tabs.sendMessage(this.currentTab.id, {
-            action: 'showPreview',
-            files: this.foundFiles,
-            selectedFiles: this.selectedFiles
-        });
-        
-        // 关闭popup
-        window.close();
-    }
-    
-    hidePreview() {
-        // 发送消息给content script隐藏预览面板
-        chrome.tabs.sendMessage(this.currentTab.id, {
-            action: 'hidePreview'
-        });
-        
-        this.foundFiles = [];
-        this.selectedFiles = [];
-    }
-    
-
-    
-    async startDownloadFromPreview(selectedFiles) {
-        if (!selectedFiles || selectedFiles.length === 0) {
-            this.showNotification('请至少选择一个文件', 'warning');
-            return;
-        }
-        
-        this.showProgress(true);
-        this.updateProgress('开始下载...', 0, selectedFiles.length);
-        
-        let successCount = 0;
-        let failCount = 0;
-        
-        for (let i = 0; i < selectedFiles.length; i++) {
-            const file = selectedFiles[i];
-            
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             try {
-                this.updateProgress(`正在下载: ${file.name}`, i, selectedFiles.length);
-                
-                const filename = this.generateFilename(file, i);
-                const folder = this.settings.createFolders ? this.getFolderName() : '';
-                const fullPath = folder ? `${this.settings.savePath}/${folder}/${filename}` : `${this.settings.savePath}/${filename}`;
-                
-                await chrome.downloads.download({
-                    url: file.url,
-                    filename: fullPath,
-                    conflictAction: 'uniquify'
-                });
-                
-                successCount++;
+                await this.downloadSingleFile(file, i + 1);
+                this.updateProgress(`正在下载: ${file.name}`, i + 1, files.length);
             } catch (error) {
-                console.error(`下载失败: ${file.name}`, error);
-                failCount++;
+                console.error(`下载文件失败: ${file.name}`, error);
             }
-            
-            // 添加延迟避免请求过快
-            await this.delay(200);
         }
         
-        this.updateProgress('下载完成', selectedFiles.length, selectedFiles.length);
-        this.showNotification(`下载完成！成功: ${successCount}, 失败: ${failCount}`, 'success');
-        
-        // 通知content script隐藏预览
-        chrome.tabs.sendMessage(this.currentTab.id, {
-            action: 'hidePreview'
-        });
-        
-        // 重置状态
+        this.updateProgress('下载完成!', files.length, files.length);
         setTimeout(() => {
-            this.showProgress(false);
+            this.hideProgress();
         }, 2000);
     }
     
+    async downloadSingleFile(file, index) {
+        const filename = this.generateFilename(file, index);
+        const savePath = this.settings.createFolders 
+            ? `${this.settings.savePath}/${this.getDomainName()}/${filename}`
+            : `${this.settings.savePath}/${filename}`;
+        
+        return new Promise((resolve, reject) => {
+            chrome.downloads.download({
+                url: file.url,
+                filename: savePath,
+                conflictAction: 'uniquify'
+            }, (downloadId) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                } else {
+                    resolve(downloadId);
+                }
+            });
+        });
+    }
+    
     generateFilename(file, index) {
-        const extension = file.url.split('.').pop().split('?')[0];
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const originalName = file.name || `file_${index}`;
         
         switch (this.settings.fileNaming) {
             case 'timestamp':
-                return `${timestamp}_${file.name || `file_${index}`}.${extension}`;
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                return `${timestamp}_${originalName}`;
             case 'sequential':
-                return `${String(index + 1).padStart(3, '0')}_${file.name || `file`}.${extension}`;
+                return `${index.toString().padStart(3, '0')}_${originalName}`;
             default:
-                return file.name || `file_${index}.${extension}`;
+                return originalName;
         }
     }
     
-    getFolderName() {
-        const hostname = new URL(this.currentTab.url).hostname;
-        return hostname.replace(/[^a-zA-Z0-9]/g, '_');
-    }
-    
-    showProgress(show) {
-        document.getElementById('progress-section').style.display = show ? 'block' : 'none';
+    getDomainName() {
+        try {
+            const url = new URL(this.currentTab.url);
+            return url.hostname.replace(/^www\./, '');
+        } catch {
+            return 'unknown';
+        }
     }
     
     updateProgress(text, current, total) {
-        document.getElementById('progress-text').textContent = text;
-        document.getElementById('progress-count').textContent = `${current}/${total}`;
+        const progressSection = document.getElementById('progress-section');
+        const progressText = document.getElementById('progress-text');
+        const progressCount = document.getElementById('progress-count');
+        const progressFill = document.getElementById('progress-fill');
+        
+        progressSection.style.display = 'block';
+        progressText.textContent = text;
+        progressCount.textContent = `${current}/${total}`;
         
         const percentage = total > 0 ? (current / total) * 100 : 0;
-        document.getElementById('progress-fill').style.width = `${percentage}%`;
+        progressFill.style.width = `${percentage}%`;
     }
     
-    showNotification(message, type = 'info') {
-        // 简单的通知实现，可以后续改进
-        console.log(`[${type.toUpperCase()}] ${message}`);
+    hideProgress() {
+        document.getElementById('progress-section').style.display = 'none';
+    }
+    
+    showError(message) {
+        // 简单的错误显示，可以后续改进
+        alert(message);
+        this.hideProgress();
+    }
+    
+    async loadSettings() {
+        const result = await chrome.storage.sync.get(this.settings);
+        this.settings = { ...this.settings, ...result };
         
-        // 创建临时通知元素
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 10px 15px;
-            border-radius: 6px;
-            font-size: 12px;
-            z-index: 10000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            max-width: 250px;
-            word-wrap: break-word;
-        `;
+        // 更新UI
+        document.getElementById('save-path').value = this.settings.savePath;
+        document.getElementById('file-naming').value = this.settings.fileNaming;
+        document.getElementById('create-folders').checked = this.settings.createFolders;
+        document.getElementById('max-files').value = this.settings.maxFiles;
+        document.getElementById('file-size-limit').value = this.settings.fileSizeLimit;
+    }
+    
+    async saveSettings() {
+        // 从UI获取设置
+        this.settings.savePath = document.getElementById('save-path').value;
+        this.settings.fileNaming = document.getElementById('file-naming').value;
+        this.settings.createFolders = document.getElementById('create-folders').checked;
+        this.settings.maxFiles = parseInt(document.getElementById('max-files').value);
+        this.settings.fileSizeLimit = parseInt(document.getElementById('file-size-limit').value);
         
-        // 根据类型设置颜色
-        switch (type) {
-            case 'success':
-                notification.style.background = '#10b981';
-                notification.style.color = 'white';
-                break;
-            case 'error':
-                notification.style.background = '#ef4444';
-                notification.style.color = 'white';
-                break;
-            case 'warning':
-                notification.style.background = '#f59e0b';
-                notification.style.color = 'white';
-                break;
-            default:
-                notification.style.background = '#3b82f6';
-                notification.style.color = 'white';
-        }
+        // 保存到Chrome存储
+        await chrome.storage.sync.set(this.settings);
         
-        document.body.appendChild(notification);
+        // 显示保存成功提示
+        const saveBtn = document.getElementById('save-settings');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = '已保存!';
+        saveBtn.style.background = '#10b981';
         
-        // 显示动画
         setTimeout(() => {
-            notification.style.opacity = '1';
-        }, 100);
-        
-        // 3秒后自动移除
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            setTimeout(() => {
-                document.body.removeChild(notification);
-            }, 300);
-        }, 3000);
+            saveBtn.textContent = originalText;
+            saveBtn.style.background = '';
+        }, 1500);
     }
     
     async resetSettings() {
-        const defaultSettings = {
-            savePath: 'Downloads/WebDownUtils',
-            fileNaming: 'original',
-            createFolders: true,
-            autoDetectPlatform: true,
-            maxFiles: 50,
-            fileSizeLimit: 100,
-            includeImages: true,
-            includeVideos: true,
-            includeDocuments: true
-        };
-        
-        this.settings = defaultSettings;
-        await this.saveSettings();
-        this.updateUI();
-        this.showNotification('设置已重置为默认值', 'success');
+        if (confirm('确定要重置所有设置吗？')) {
+            // 重置为默认值
+            this.settings = {
+                savePath: 'Downloads/WebDownUtils',
+                fileNaming: 'original',
+                createFolders: true,
+                maxFiles: 50,
+                fileSizeLimit: 100
+            };
+            
+            // 清除存储的设置
+            await chrome.storage.sync.clear();
+            
+            // 更新UI
+            await this.loadSettings();
+            
+            alert('设置已重置');
+        }
     }
     
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    async previewFiles() {
+        try {
+            // 先获取当前页面的文件，再关闭弹窗
+            const response = await chrome.tabs.sendMessage(this.currentTab.id, {
+                action: 'scanPage',
+                settings: this.settings
+            });
+            
+            if (response && response.files) {
+                // 显示预览面板
+                await chrome.tabs.sendMessage(this.currentTab.id, {
+                    action: 'showPreview',
+                    files: response.files,
+                    selectedFiles: []
+                });
+                
+                // 成功后关闭弹窗
+                window.close();
+            } else {
+                alert('未找到可预览的文件');
+            }
+        } catch (error) {
+            console.error('预览文件失败:', error);
+            alert('预览失败: ' + error.message);
+        }
     }
 }
 

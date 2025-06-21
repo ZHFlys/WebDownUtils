@@ -33,9 +33,6 @@ class ContentScanner {
                     this.startAreaSelection();
                     sendResponse({ success: true });
                     break;
-                case 'scanWithStrategy':
-                    this.scanWithStrategy(request.strategy, request.settings).then(sendResponse);
-                    return true;
                 case 'showPreview':
                     this.showPreviewPanel(request.files, request.selectedFiles);
                     sendResponse({ success: true });
@@ -184,94 +181,6 @@ class ContentScanner {
         });
 
         return documents;
-    }
-    
-    async scanWithStrategy(strategy, settings) {
-        let files = [];
-        
-        // 使用平台策略模块
-        if (window.PlatformStrategies) {
-            const strategiesManager = new window.PlatformStrategies();
-            const platformStrategy = strategiesManager.getStrategy(window.location.href);
-            files = await platformStrategy.scanPage(settings);
-        } else {
-            // 降级到默认扫描
-            files = await this.scanPage(settings);
-        }
-        
-        return files;
-    }
-    
-    async scanXiaohongshu(settings) {
-        const files = [];
-        
-        try {
-            // 小红书特定的选择器
-            const imageSelectors = [
-                '.note-item img',
-                '.note-detail img',
-                '.swiper-slide img',
-                '.pic-item img',
-                '[class*="image"] img',
-                '[class*="photo"] img'
-            ];
-            
-            const videoSelectors = [
-                '.note-item video',
-                '.note-detail video',
-                '.swiper-slide video'
-            ];
-            
-            // 扫描图片
-            for (const selector of imageSelectors) {
-                const images = document.querySelectorAll(selector);
-                images.forEach((img, index) => {
-                    const src = img.src || img.dataset.src || img.dataset.original;
-                    if (src && this.isValidUrl(src)) {
-                        // 小红书图片通常有多个尺寸，尝试获取原图
-                        const originalSrc = this.getXiaohongshuOriginalImage(src);
-                        files.push({
-                            type: 'image',
-                            url: originalSrc,
-                            name: `xiaohongshu_${this.extractFilename(originalSrc) || `image_${index}`}`,
-                            element: img,
-                            platform: '小红书'
-                        });
-                    }
-                });
-            }
-            
-            // 扫描视频
-            for (const selector of videoSelectors) {
-                const videos = document.querySelectorAll(selector);
-                videos.forEach((video, index) => {
-                    const src = video.src || video.currentSrc;
-                    if (src && this.isValidUrl(src)) {
-                        files.push({
-                            type: 'video',
-                            url: src,
-                            name: `xiaohongshu_${this.extractFilename(src) || `video_${index}`}`,
-                            element: video,
-                            platform: '小红书'
-                        });
-                    }
-                });
-            }
-            
-            return { files: this.filterFiles(files, settings) };
-        } catch (error) {
-            console.error('小红书扫描失败:', error);
-            return { files: [], error: error.message };
-        }
-    }
-    
-    getXiaohongshuOriginalImage(src) {
-        // 小红书图片URL优化，获取原图
-        if (src.includes('ci.xiaohongshu.com')) {
-            // 移除尺寸参数，获取原图
-            return src.replace(/\?.*$/, '');
-        }
-        return src;
     }
     
     startAreaSelection() {

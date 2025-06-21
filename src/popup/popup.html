@@ -19,6 +19,15 @@
         </div>
         
         <div class="tab-content" id="download-tab">
+            <!-- 预览文件快捷按钮 -->
+            <div class="preview-section">
+                <button id="preview-files-main" class="preview-btn-main">
+                    <span class="preview-btn-icon">👁️</span>
+                    <span class="preview-btn-text">预览文件</span>
+                    <span class="preview-btn-desc">查看页面所有可下载文件</span>
+                </button>
+            </div>
+            
             <div class="download-modes">
                 <div class="mode-card" id="full-page-mode">
                     <div class="mode-icon">🌐</div>
@@ -33,17 +42,6 @@
                     <p>选择页面特定区域进行下载</p>
                     <button class="mode-btn" data-mode="area-select">选择区域</button>
                 </div>
-                
-                <div class="mode-card" id="platform-mode">
-                    <div class="mode-icon">📱</div>
-                    <h3>平台优化</h3>
-                    <p>针对小红书等平台的智能下载</p>
-                    <button class="mode-btn" data-mode="platform">智能识别</button>
-                </div>
-            </div>
-            
-            <div class="current-platform" id="platform-info">
-                <span class="platform-name">当前平台：<span id="detected-platform">检测中...</span></span>
             </div>
             
             <div class="network-info">
@@ -87,13 +85,6 @@
                         按网站创建文件夹
                     </label>
                 </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="checkbox" id="auto-detect-platform">
-                        <span class="checkmark"></span>
-                        自动检测平台
-                    </label>
-                </div>
             </div>
             
             <div class="settings-section">
@@ -111,7 +102,6 @@
             <div class="settings-actions">
                 <button id="save-settings" class="action-btn primary">保存设置</button>
                 <button id="reset-settings" class="action-btn secondary">重置</button>
-                <button id="preview-files" class="action-btn secondary">预览文件</button>
             </div>
         </div>
     </div>
