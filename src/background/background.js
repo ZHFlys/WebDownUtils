@@ -44,30 +44,6 @@ class BackgroundService {
     setupContextMenus() {
         chrome.runtime.onInstalled.addListener(() => {
             chrome.contextMenus.create({
-                id: 'download-image',
-                title: '下载此图片',
-                contexts: ['image']
-            });
-            
-            chrome.contextMenus.create({
-                id: 'download-video',
-                title: '下载此视频',
-                contexts: ['video']
-            });
-            
-            chrome.contextMenus.create({
-                id: 'download-link',
-                title: '下载此链接',
-                contexts: ['link']
-            });
-            
-            chrome.contextMenus.create({
-                id: 'separator1',
-                type: 'separator',
-                contexts: ['image', 'video', 'link']
-            });
-            
-            chrome.contextMenus.create({
                 id: 'scan-page',
                 title: '扫描页面所有文件',
                 contexts: ['page']
@@ -78,38 +54,20 @@ class BackgroundService {
             const settings = await this.getSettings();
             
             switch (info.menuItemId) {
-                case 'download-image':
-                    await this.downloadSingleFile({
-                        type: 'image',
-                        url: info.srcUrl,
-                        name: this.extractFilename(info.srcUrl) || 'image'
-                    }, settings);
-                    break;
-                    
-                case 'download-video':
-                    await this.downloadSingleFile({
-                        type: 'video',
-                        url: info.srcUrl,
-                        name: this.extractFilename(info.srcUrl) || 'video'
-                    }, settings);
-                    break;
-                    
-                case 'download-link':
-                    await this.downloadSingleFile({
-                        type: 'document',
-                        url: info.linkUrl,
-                        name: this.extractFilename(info.linkUrl) || 'file'
-                    }, settings);
-                    break;
-                    
                 case 'scan-page':
-                    // 发送消息给content script扫描页面
+                    // 发送消息给content script扫描页面并显示预览窗口
                     chrome.tabs.sendMessage(tab.id, {
                         action: 'scanPage',
                         settings: settings
                     }, (response) => {
                         if (response && response.files) {
-                            this.downloadFiles(response.files, settings);
+                            // 显示预览面板而不是直接下载
+                            chrome.tabs.sendMessage(tab.id, {
+                                action: 'showPreview',
+                                files: response.files,
+                                selectedFiles: [],
+                                settings: settings
+                            });
                         }
                     });
                     break;
