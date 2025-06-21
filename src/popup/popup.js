@@ -72,11 +72,6 @@ class WebDownloadHelper {
         document.getElementById('reset-settings').addEventListener('click', () => {
             this.resetSettings();
         });
-        
-        // 主预览按钮
-        document.getElementById('preview-files-main').addEventListener('click', () => {
-            this.previewFiles();
-        });
     }
     
     setupTabSwitching() {
@@ -118,17 +113,30 @@ class WebDownloadHelper {
     }
     
     async downloadFullPage() {
-        this.updateProgress('正在扫描页面...', 0, 0);
-        
-        const response = await chrome.tabs.sendMessage(this.currentTab.id, {
-            action: 'scanPage',
-            settings: this.settings
-        });
-        
-        if (response && response.files) {
-            await this.downloadFiles(response.files);
-        } else {
-            this.showError('未找到可下载的文件');
+        try {
+            // 先获取当前页面的文件
+            const response = await chrome.tabs.sendMessage(this.currentTab.id, {
+                action: 'scanPage',
+                settings: this.settings
+            });
+            
+            if (response && response.files) {
+                // 显示预览面板
+                await chrome.tabs.sendMessage(this.currentTab.id, {
+                    action: 'showPreview',
+                    files: response.files,
+                    selectedFiles: [],
+                    settings: this.settings
+                });
+                
+                // 成功后关闭弹窗
+                window.close();
+            } else {
+                this.showError('未找到可预览的文件');
+            }
+        } catch (error) {
+            console.error('预览文件失败:', error);
+            this.showError('预览失败: ' + error.message);
         }
     }
     
@@ -385,33 +393,7 @@ class WebDownloadHelper {
         }
     }
     
-    async previewFiles() {
-        try {
-            // 先获取当前页面的文件，再关闭弹窗
-            const response = await chrome.tabs.sendMessage(this.currentTab.id, {
-                action: 'scanPage',
-                settings: this.settings
-            });
-            
-            if (response && response.files) {
-                // 显示预览面板
-                await chrome.tabs.sendMessage(this.currentTab.id, {
-                    action: 'showPreview',
-                    files: response.files,
-                    selectedFiles: [],
-                    settings: this.settings
-                });
-                
-                // 成功后关闭弹窗
-                window.close();
-            } else {
-                alert('未找到可预览的文件');
-            }
-        } catch (error) {
-            console.error('预览文件失败:', error);
-            alert('预览失败: ' + error.message);
-        }
-    }
+
 }
 
 // 初始化
