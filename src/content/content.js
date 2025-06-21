@@ -23,6 +23,7 @@ class ContentScanner {
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.networkRefreshInterval = null;
+        this.isFilterCollapsed = false;   // 筛选区域折叠状态
         this.init();
     }
     
@@ -767,59 +768,70 @@ class ContentScanner {
                 </div>
                 
                 <div class="preview-filters">
-                    <div class="filter-row primary-filters">
-                        <div class="filter-group">
-                            <button class="filter-btn primary active" data-filter="all">全部</button>
-                            <button class="filter-btn primary" data-filter="page">页面文件</button>
-                            <button class="filter-btn primary" data-filter="network">网络文件</button>
+                    <div class="filter-header" id="filter-header">
+                        <div class="filter-header-left">
+                            <span class="filter-title">🔍 筛选条件</span>
+                            <span class="filter-status" id="filter-status">全部文件</span>
                         </div>
+                        <button class="filter-toggle-btn" id="filter-toggle-btn" title="展开/折叠筛选选项">
+                            <span class="toggle-icon">▼</span>
+                        </button>
                     </div>
-                    <div class="filter-row secondary-filters">
-                        <div class="filter-group">
-                            <button class="filter-btn secondary active" data-type="all">全部类型</button>
-                            <button class="filter-btn secondary" data-type="image">图片</button>
-                            <button class="filter-btn secondary" data-type="video">视频</button>
-                            <button class="filter-btn secondary" data-type="document">文档</button>
-                        </div>
-                    </div>
-                    <div class="filter-row size-filters">
-                        <div class="filter-group">
-                            <button class="filter-btn size active" data-size="all">全部大小</button>
-                            <button class="filter-btn size" data-size="small">小文件(&lt;1MB)</button>
-                            <button class="filter-btn size" data-size="medium">中文件(1-10MB)</button>
-                            <button class="filter-btn size" data-size="large">大文件(&gt;10MB)</button>
-                            <button class="filter-btn size" data-size="custom">自定义范围</button>
-                        </div>
-                    </div>
-                    <div class="filter-row size-range-row" id="size-range-row" style="display: none;">
-                        <div class="size-range-container">
-                            <div class="range-input-group">
-                                <label>最小:</label>
-                                <input type="number" id="min-size-input" min="0" step="0.1" placeholder="0">
-                                <select id="min-size-unit">
-                                    <option value="KB">KB</option>
-                                    <option value="MB" selected>MB</option>
-                                    <option value="GB">GB</option>
-                                </select>
+                    <div class="filter-content" id="filter-content">
+                        <div class="filter-row primary-filters">
+                            <div class="filter-group">
+                                <button class="filter-btn primary active" data-filter="all">全部</button>
+                                <button class="filter-btn primary" data-filter="page">页面文件</button>
+                                <button class="filter-btn primary" data-filter="network">网络文件</button>
                             </div>
-                            <div class="range-separator">-</div>
-                            <div class="range-input-group">
-                                <label>最大:</label>
-                                <input type="number" id="max-size-input" min="0" step="0.1" placeholder="无限制">
-                                <select id="max-size-unit">
-                                    <option value="KB">KB</option>
-                                    <option value="MB" selected>MB</option>
-                                    <option value="GB">GB</option>
-                                </select>
-                            </div>
-                            <button class="apply-range-btn" id="apply-size-range">应用</button>
                         </div>
-                    </div>
-                    <div class="action-row">
-                        <button class="action-btn-small" id="refresh-files-preview">🔄 重新获取</button>
-                        <button class="action-btn-small" id="select-all-preview">全选</button>
-                        <button class="action-btn-small" id="select-none-preview">全不选</button>
-                        <button class="action-btn-small danger" id="clear-all-files">🗑️ 清除全部</button>
+                        <div class="filter-row secondary-filters">
+                            <div class="filter-group">
+                                <button class="filter-btn secondary active" data-type="all">全部类型</button>
+                                <button class="filter-btn secondary" data-type="image">图片</button>
+                                <button class="filter-btn secondary" data-type="video">视频</button>
+                                <button class="filter-btn secondary" data-type="document">文档</button>
+                            </div>
+                        </div>
+                        <div class="filter-row size-filters">
+                            <div class="filter-group">
+                                <button class="filter-btn size active" data-size="all">全部大小</button>
+                                <button class="filter-btn size" data-size="small">小文件(&lt;1MB)</button>
+                                <button class="filter-btn size" data-size="medium">中文件(1-10MB)</button>
+                                <button class="filter-btn size" data-size="large">大文件(&gt;10MB)</button>
+                                <button class="filter-btn size" data-size="custom">自定义范围</button>
+                            </div>
+                        </div>
+                        <div class="filter-row size-range-row" id="size-range-row" style="display: none;">
+                            <div class="size-range-container">
+                                <div class="range-input-group">
+                                    <label>最小:</label>
+                                    <input type="number" id="min-size-input" min="0" step="0.1" placeholder="0">
+                                    <select id="min-size-unit">
+                                        <option value="KB">KB</option>
+                                        <option value="MB" selected>MB</option>
+                                        <option value="GB">GB</option>
+                                    </select>
+                                </div>
+                                <div class="range-separator">-</div>
+                                <div class="range-input-group">
+                                    <label>最大:</label>
+                                    <input type="number" id="max-size-input" min="0" step="0.1" placeholder="无限制">
+                                    <select id="max-size-unit">
+                                        <option value="KB">KB</option>
+                                        <option value="MB" selected>MB</option>
+                                        <option value="GB">GB</option>
+                                    </select>
+                                </div>
+                                <button class="apply-range-btn" id="apply-size-range">应用</button>
+                            </div>
+                        </div>
+                        <div class="action-row">
+                            <button class="action-btn-small" id="refresh-files-preview">🔄 重新获取</button>
+                            <button class="action-btn-small" id="select-all-preview">全选</button>
+                            <button class="action-btn-small" id="select-none-preview">全不选</button>
+                            <button class="action-btn-small danger" id="clear-all-files">🗑️ 清除全部</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -949,10 +961,88 @@ class ContentScanner {
             }
             
             .preview-filters {
-                padding: 12px 20px;
                 background: white;
                 border-bottom: 1px solid #e2e8f0;
                 flex-shrink: 0;
+            }
+            
+            .filter-header {
+                padding: 12px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                user-select: none;
+                transition: all 0.3s ease;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            
+            .filter-header:hover {
+                background: #f8fafc;
+            }
+            
+            .filter-header-left {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .filter-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: #374151;
+            }
+            
+            .filter-status {
+                font-size: 11px;
+                color: #6b7280;
+                background: #f3f4f6;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-weight: 500;
+            }
+            
+            .filter-toggle-btn {
+                width: 28px;
+                height: 28px;
+                border: none;
+                background: #f1f5f9;
+                border-radius: 6px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.3s ease;
+                color: #64748b;
+            }
+            
+            .filter-toggle-btn:hover {
+                background: #e2e8f0;
+                color: #475569;
+                transform: scale(1.05);
+            }
+            
+            .toggle-icon {
+                font-size: 12px;
+                font-weight: bold;
+                transition: transform 0.3s ease;
+            }
+            
+            .filter-toggle-btn.collapsed .toggle-icon {
+                transform: rotate(-90deg);
+            }
+            
+            .filter-content {
+                padding: 12px 20px;
+                transition: all 0.3s ease;
+                overflow: hidden;
+            }
+            
+            .filter-content.collapsed {
+                max-height: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                opacity: 0;
             }
             
             .filter-row {
@@ -1608,6 +1698,32 @@ class ContentScanner {
                      width: 350px;
                  }
                  
+                 .filter-header {
+                     padding: 10px 16px;
+                 }
+                 
+                 .filter-title {
+                     font-size: 12px;
+                 }
+                 
+                 .filter-status {
+                     font-size: 10px;
+                     padding: 1px 6px;
+                 }
+                 
+                 .filter-toggle-btn {
+                     width: 24px;
+                     height: 24px;
+                 }
+                 
+                 .toggle-icon {
+                     font-size: 10px;
+                 }
+                 
+                 .filter-content {
+                     padding: 10px 16px;
+                 }
+                 
                  .filter-row {
                      flex-direction: column;
                      align-items: flex-start;
@@ -1753,6 +1869,17 @@ class ContentScanner {
             this.applySizeRange();
         });
         
+        // 筛选区域折叠按钮
+        this.previewPanel.querySelector('#filter-toggle-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleFilterCollapse();
+        });
+        
+        // 筛选头部点击折叠
+        this.previewPanel.querySelector('#filter-header').addEventListener('click', () => {
+            this.toggleFilterCollapse();
+        });
+        
         // 取消和确认按钮
         this.previewPanel.querySelector('#cancel-download-preview').addEventListener('click', () => {
             this.hidePreviewPanel();
@@ -1848,6 +1975,7 @@ class ContentScanner {
     updatePreviewContent() {
         this.updatePreviewStats();
         this.renderPreviewFileList();
+        this.updateFilterStatus();
     }
     
     updatePreviewStats() {
@@ -2098,6 +2226,68 @@ class ContentScanner {
         return `${hours}:${minutes}`;
     }
     
+    toggleFilterCollapse() {
+        this.isFilterCollapsed = !this.isFilterCollapsed;
+        
+        const filterContent = this.previewPanel.querySelector('#filter-content');
+        const toggleBtn = this.previewPanel.querySelector('#filter-toggle-btn');
+        
+        if (this.isFilterCollapsed) {
+            filterContent.classList.add('collapsed');
+            toggleBtn.classList.add('collapsed');
+        } else {
+            filterContent.classList.remove('collapsed');
+            toggleBtn.classList.remove('collapsed');
+        }
+        
+        // 更新筛选状态显示
+        this.updateFilterStatus();
+    }
+    
+    updateFilterStatus() {
+        const statusElement = this.previewPanel.querySelector('#filter-status');
+        const filteredFiles = this.getFilteredPreviewFiles();
+        const totalFiles = this.foundFiles.length;
+        
+        let statusText = '';
+        
+        if (totalFiles === 0) {
+            statusText = '暂无文件';
+        } else if (filteredFiles.length === totalFiles) {
+            statusText = `全部文件 (${totalFiles})`;
+        } else {
+            statusText = `${filteredFiles.length}/${totalFiles} 个文件`;
+        }
+        
+        // 添加当前筛选条件的简要描述
+        const activeFilters = [];
+        
+        if (this.currentSourceFilter && this.currentSourceFilter !== 'all') {
+            activeFilters.push(this.currentSourceFilter === 'page' ? '页面' : '网络');
+        }
+        
+        if (this.currentTypeFilter && this.currentTypeFilter !== 'all') {
+            const typeMap = { 'image': '图片', 'video': '视频', 'document': '文档' };
+            activeFilters.push(typeMap[this.currentTypeFilter] || this.currentTypeFilter);
+        }
+        
+        if (this.currentSizeFilter && this.currentSizeFilter !== 'all') {
+            const sizeMap = { 
+                'small': '小文件', 
+                'medium': '中文件', 
+                'large': '大文件',
+                'custom': '自定义大小'
+            };
+            activeFilters.push(sizeMap[this.currentSizeFilter] || this.currentSizeFilter);
+        }
+        
+        if (activeFilters.length > 0) {
+            statusText += ` · ${activeFilters.join(' · ')}`;
+        }
+        
+        statusElement.textContent = statusText;
+    }
+    
     switchSourceFilter(filter) {
         this.currentSourceFilter = filter;
         
@@ -2107,6 +2297,7 @@ class ContentScanner {
         });
         
         this.renderPreviewFileList();
+        this.updateFilterStatus();
     }
     
     switchTypeFilter(type) {
@@ -2118,6 +2309,7 @@ class ContentScanner {
         });
         
         this.renderPreviewFileList();
+        this.updateFilterStatus();
     }
     
     switchSizeFilter(size) {
@@ -2142,6 +2334,7 @@ class ContentScanner {
         }
         
         this.renderPreviewFileList();
+        this.updateFilterStatus();
     }
     
     applySizeRange() {
@@ -2183,6 +2376,7 @@ class ContentScanner {
         
         // 重新渲染文件列表
         this.renderPreviewFileList();
+        this.updateFilterStatus();
     }
     
     convertSizeToBytes(value, unit) {
