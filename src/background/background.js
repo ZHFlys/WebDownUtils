@@ -329,9 +329,39 @@ class BackgroundService {
             fileSizeLimit: 100,
             zipThreshold: 3,
             downloadDelay: 0.5,
+            showFormatFilter: false,
             includeImages: true,
             includeVideos: true,
-            includeDocuments: true
+            includeDocuments: true,
+            formats: {
+                // 图片格式
+                jpg: true,
+                png: true,
+                gif: true,
+                webp: true,
+                svg: true,
+                // 视频格式
+                mp4: true,
+                webm: true,
+                avi: true,
+                mov: true,
+                mkv: true,
+                // 音频格式
+                mp3: true,
+                wav: true,
+                flac: true,
+                aac: true,
+                ogg: true,
+                m4a: true,
+                // 文档格式
+                pdf: true,
+                doc: true,
+                docx: true,
+                xls: true,
+                xlsx: true,
+                ppt: true,
+                pptx: true
+            }
         };
         
         const stored = await chrome.storage.sync.get(defaultSettings);

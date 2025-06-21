@@ -27,6 +27,7 @@ class ContentScanner {
         this.dragStartY = 0;
         this.networkRefreshInterval = null;
         this.isFilterCollapsed = false;   // 筛选区域折叠状态
+        this.globalClickHandler = null;   // 全局点击事件监听器引用
         this.init();
     }
     
@@ -875,6 +876,12 @@ class ContentScanner {
         if (this.previewPanel && this.previewPanel.parentNode) {
             document.body.removeChild(this.previewPanel);
             this.previewPanel = null;
+        }
+        
+        // 移除全局点击事件监听器
+        if (this.globalClickHandler) {
+            document.removeEventListener('click', this.globalClickHandler);
+            this.globalClickHandler = null;
         }
         
         // 移除样式
@@ -2404,11 +2411,12 @@ class ContentScanner {
         });
         
         // 点击其他地方关闭菜单
-        document.addEventListener('click', (e) => {
+        this.globalClickHandler = (e) => {
             if (!e.target.closest('.download-button-group')) {
                 this.hideDownloadModeMenu();
             }
-        });
+        };
+        document.addEventListener('click', this.globalClickHandler);
         
         // 使用事件委托处理图片预览和复制链接
         this.previewPanel.addEventListener('click', (e) => {
@@ -2497,6 +2505,7 @@ class ContentScanner {
         this.updatePreviewStats();
         this.renderPreviewFileList();
         this.updateFilterStatus();
+        this.updateFormatFilterVisibility();
     }
     
     updatePreviewStats() {
@@ -2879,6 +2888,18 @@ class ContentScanner {
         statusElement.textContent = statusText;
     }
     
+    updateFormatFilterVisibility() {
+        const formatFiltersRow = this.previewPanel.querySelector('.format-filters');
+        if (!formatFiltersRow) return;
+        
+        // 检查设置中是否禁用了格式筛选
+        if (this.currentSettings && this.currentSettings.showFormatFilter === false) {
+            formatFiltersRow.style.display = 'none';
+        } else {
+            formatFiltersRow.style.display = 'block';
+        }
+    }
+    
     switchSourceFilter(filter) {
         this.currentSourceFilter = filter;
         
@@ -3033,6 +3054,9 @@ class ContentScanner {
                 chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
             });
             
+            // 更新当前设置
+            this.currentSettings = settings;
+            
             // 同时获取页面文件和网络文件
             const [pageResult, networkFiles] = await Promise.all([
                 this.scanPage(settings),
@@ -3138,6 +3162,11 @@ class ContentScanner {
     }
     
     hideDownloadModeMenu() {
+        // 检查预览面板是否存在
+        if (!this.previewPanel) {
+            return;
+        }
+        
         const menu = this.previewPanel.querySelector('#download-mode-menu');
         const toggle = this.previewPanel.querySelector('#download-mode-toggle');
         
