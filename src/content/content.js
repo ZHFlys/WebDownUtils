@@ -52,23 +52,15 @@ class ContentScanner {
         const files = [];
         
         try {
-            // 扫描图片
-            if (settings.includeImages) {
-                const images = this.scanImages();
-                files.push(...images);
-            }
+            // 扫描所有类型的文件
+            const images = this.scanImages();
+            files.push(...images);
             
-            // 扫描视频
-            if (settings.includeVideos) {
-                const videos = this.scanVideos();
-                files.push(...videos);
-            }
+            const videos = this.scanVideos();
+            files.push(...videos);
             
-            // 扫描文档
-            if (settings.includeDocuments) {
-                const documents = this.scanDocuments();
-                files.push(...documents);
-            }
+            const documents = this.scanDocuments();
+            files.push(...documents);
             
             return { files: this.filterFiles(files, settings) };
         } catch (error) {
@@ -231,43 +223,39 @@ class ContentScanner {
             ];
             
             // 扫描图片
-            if (settings.includeImages) {
-                for (const selector of imageSelectors) {
-                    const images = document.querySelectorAll(selector);
-                    images.forEach((img, index) => {
-                        const src = img.src || img.dataset.src || img.dataset.original;
-                        if (src && this.isValidUrl(src)) {
-                            // 小红书图片通常有多个尺寸，尝试获取原图
-                            const originalSrc = this.getXiaohongshuOriginalImage(src);
-                            files.push({
-                                type: 'image',
-                                url: originalSrc,
-                                name: `xiaohongshu_${this.extractFilename(originalSrc) || `image_${index}`}`,
-                                element: img,
-                                platform: '小红书'
-                            });
-                        }
-                    });
-                }
+            for (const selector of imageSelectors) {
+                const images = document.querySelectorAll(selector);
+                images.forEach((img, index) => {
+                    const src = img.src || img.dataset.src || img.dataset.original;
+                    if (src && this.isValidUrl(src)) {
+                        // 小红书图片通常有多个尺寸，尝试获取原图
+                        const originalSrc = this.getXiaohongshuOriginalImage(src);
+                        files.push({
+                            type: 'image',
+                            url: originalSrc,
+                            name: `xiaohongshu_${this.extractFilename(originalSrc) || `image_${index}`}`,
+                            element: img,
+                            platform: '小红书'
+                        });
+                    }
+                });
             }
             
             // 扫描视频
-            if (settings.includeVideos) {
-                for (const selector of videoSelectors) {
-                    const videos = document.querySelectorAll(selector);
-                    videos.forEach((video, index) => {
-                        const src = video.src || video.currentSrc;
-                        if (src && this.isValidUrl(src)) {
-                            files.push({
-                                type: 'video',
-                                url: src,
-                                name: `xiaohongshu_${this.extractFilename(src) || `video_${index}`}`,
-                                element: video,
-                                platform: '小红书'
-                            });
-                        }
-                    });
-                }
+            for (const selector of videoSelectors) {
+                const videos = document.querySelectorAll(selector);
+                videos.forEach((video, index) => {
+                    const src = video.src || video.currentSrc;
+                    if (src && this.isValidUrl(src)) {
+                        files.push({
+                            type: 'video',
+                            url: src,
+                            name: `xiaohongshu_${this.extractFilename(src) || `video_${index}`}`,
+                            element: video,
+                            platform: '小红书'
+                        });
+                    }
+                });
             }
             
             return { files: this.filterFiles(files, settings) };
@@ -290,93 +278,112 @@ class ContentScanner {
         if (this.isSelectionMode) return;
         
         this.isSelectionMode = true;
-        this.createSelectionOverlay();
-        this.setupSelectionEvents();
+        this.currentHighlightedElement = null;
+        this.createElementSelector();
+        this.setupElementSelectorEvents();
     }
     
-    createSelectionOverlay() {
-        // 创建遮罩层
-        this.selectionOverlay = document.createElement('div');
-        this.selectionOverlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.3);
-            z-index: 999999;
-            cursor: crosshair;
-        `;
-        
-        // 创建选择框
-        this.selectionBox = document.createElement('div');
-        this.selectionBox.style.cssText = `
+    createElementSelector() {
+        // 创建高亮覆盖层
+        this.highlightOverlay = document.createElement('div');
+        this.highlightOverlay.id = 'element-highlight-overlay';
+        this.highlightOverlay.style.cssText = `
             position: absolute;
-            border: 2px dashed #4f46e5;
+            border: 2px solid #4f46e5;
             background: rgba(79, 70, 229, 0.1);
             pointer-events: none;
+            z-index: 999998;
             display: none;
+            transition: all 0.1s ease;
         `;
+        document.body.appendChild(this.highlightOverlay);
         
-        this.selectionOverlay.appendChild(this.selectionBox);
-        document.body.appendChild(this.selectionOverlay);
+        // 创建信息提示框
+        this.infoBox = document.createElement('div');
+        this.infoBox.id = 'element-info-box';
+        this.infoBox.style.cssText = `
+            position: fixed;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 999999;
+            pointer-events: none;
+            display: none;
+            max-width: 300px;
+            word-break: break-all;
+        `;
+        document.body.appendChild(this.infoBox);
         
-        // 添加提示信息
-        const tip = document.createElement('div');
-        tip.style.cssText = `
+        // 创建操作提示
+        this.tipBox = document.createElement('div');
+        this.tipBox.style.cssText = `
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
             background: white;
-            padding: 10px 20px;
-            border-radius: 6px;
+            padding: 12px 20px;
+            border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
             z-index: 1000000;
             font-family: Arial, sans-serif;
             font-size: 14px;
             color: #333;
+            border: 2px solid #4f46e5;
         `;
-        tip.textContent = '拖拽选择要下载的区域，按ESC取消';
-        this.selectionOverlay.appendChild(tip);
+        this.tipBox.innerHTML = `
+            <div style="text-align: center;">
+                <strong>🎯 元素选择模式</strong><br>
+                <span style="font-size: 12px; color: #666;">
+                    悬停高亮元素，点击选择区域<br>
+                    按 ESC 取消选择
+                </span>
+            </div>
+        `;
+        document.body.appendChild(this.tipBox);
+        
+        // 添加样式覆盖，防止页面滚动
+        document.body.style.overflow = 'hidden';
     }
     
-    setupSelectionEvents() {
-        const mouseDown = (e) => {
-            if (e.target !== this.selectionOverlay) return;
-            
-            this.startX = e.clientX;
-            this.startY = e.clientY;
-            this.selectionBox.style.display = 'block';
-            this.selectionBox.style.left = this.startX + 'px';
-            this.selectionBox.style.top = this.startY + 'px';
-            this.selectionBox.style.width = '0px';
-            this.selectionBox.style.height = '0px';
-        };
-        
+    setupElementSelectorEvents() {
         const mouseMove = (e) => {
-            if (this.selectionBox.style.display === 'none') return;
+            e.preventDefault();
+            e.stopPropagation();
             
-            const currentX = e.clientX;
-            const currentY = e.clientY;
+            // 获取鼠标位置下的元素
+            const elementUnderMouse = document.elementFromPoint(e.clientX, e.clientY);
             
-            const left = Math.min(this.startX, currentX);
-            const top = Math.min(this.startY, currentY);
-            const width = Math.abs(currentX - this.startX);
-            const height = Math.abs(currentY - this.startY);
+            if (!elementUnderMouse || 
+                elementUnderMouse === this.highlightOverlay || 
+                elementUnderMouse === this.infoBox ||
+                elementUnderMouse === this.tipBox ||
+                elementUnderMouse.closest('#element-highlight-overlay') ||
+                elementUnderMouse.closest('#element-info-box')) {
+                return;
+            }
             
-            this.selectionBox.style.left = left + 'px';
-            this.selectionBox.style.top = top + 'px';
-            this.selectionBox.style.width = width + 'px';
-            this.selectionBox.style.height = height + 'px';
+            // 找到合适的父元素（优先选择有内容的容器）
+            const targetElement = this.findBestTargetElement(elementUnderMouse);
+            
+            if (targetElement !== this.currentHighlightedElement) {
+                this.highlightElement(targetElement);
+                this.updateInfoBox(targetElement, e.clientX, e.clientY);
+                this.currentHighlightedElement = targetElement;
+            }
         };
         
-        const mouseUp = async (e) => {
-            if (this.selectionBox.style.display === 'none') return;
+        const mouseClick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             
-            const rect = this.selectionBox.getBoundingClientRect();
-            await this.processSelectedArea(rect);
-            this.endAreaSelection();
+            if (this.currentHighlightedElement) {
+                await this.processSelectedElement(this.currentHighlightedElement);
+                this.endAreaSelection();
+            }
         };
         
         const keyDown = (e) => {
@@ -385,105 +392,260 @@ class ContentScanner {
             }
         };
         
-        this.selectionOverlay.addEventListener('mousedown', mouseDown);
-        this.selectionOverlay.addEventListener('mousemove', mouseMove);
-        this.selectionOverlay.addEventListener('mouseup', mouseUp);
-        document.addEventListener('keydown', keyDown);
+        // 阻止所有页面交互
+        const preventDefault = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        
+        document.addEventListener('mousemove', mouseMove, true);
+        document.addEventListener('click', mouseClick, true);
+        document.addEventListener('keydown', keyDown, true);
+        document.addEventListener('scroll', preventDefault, true);
+        document.addEventListener('wheel', preventDefault, true);
         
         // 保存事件引用以便清理
-        this._selectionEvents = { mouseDown, mouseMove, mouseUp, keyDown };
+        this._selectionEvents = { 
+            mouseMove, 
+            mouseClick, 
+            keyDown, 
+            preventDefault 
+        };
     }
     
-    async processSelectedArea(rect) {
-        const elements = document.elementsFromPoint(
-            rect.left + rect.width / 2,
-            rect.top + rect.height / 2
-        );
+    findBestTargetElement(element) {
+        // 如果是文本节点，获取父元素
+        if (element.nodeType === Node.TEXT_NODE) {
+            element = element.parentElement;
+        }
         
+        // 向上查找，寻找有意义的容器元素
+        let current = element;
+        const meaningfulTags = ['DIV', 'SECTION', 'ARTICLE', 'MAIN', 'ASIDE', 'HEADER', 'FOOTER', 'NAV'];
+        
+        // 最多向上查找5层
+        for (let i = 0; i < 5 && current && current !== document.body; i++) {
+            // 如果是有意义的标签且有一定尺寸
+            if (meaningfulTags.includes(current.tagName)) {
+                const rect = current.getBoundingClientRect();
+                if (rect.width > 50 && rect.height > 50) {
+                    return current;
+                }
+            }
+            current = current.parentElement;
+        }
+        
+        // 如果没找到合适的容器，返回原始元素
+        return element;
+    }
+    
+    highlightElement(element) {
+        const rect = element.getBoundingClientRect();
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+        
+        this.highlightOverlay.style.cssText = `
+            position: absolute;
+            left: ${rect.left + scrollX}px;
+            top: ${rect.top + scrollY}px;
+            width: ${rect.width}px;
+            height: ${rect.height}px;
+            border: 2px solid #4f46e5;
+            background: rgba(79, 70, 229, 0.1);
+            pointer-events: none;
+            z-index: 999998;
+            display: block;
+            transition: all 0.1s ease;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+        `;
+    }
+    
+    updateInfoBox(element, mouseX, mouseY) {
+        const tagName = element.tagName.toLowerCase();
+        const className = element.className ? `.${element.className.split(' ').join('.')}` : '';
+        const id = element.id ? `#${element.id}` : '';
+        const rect = element.getBoundingClientRect();
+        
+        // 计算元素内的媒体文件数量
+        const images = element.querySelectorAll('img').length;
+        const videos = element.querySelectorAll('video').length;
+        const links = element.querySelectorAll('a[href*=".pdf"], a[href*=".doc"], a[href*=".docx"]').length;
+        
+        this.infoBox.innerHTML = `
+            <div><strong>${tagName}${id}${className}</strong></div>
+            <div>尺寸: ${Math.round(rect.width)} × ${Math.round(rect.height)}</div>
+            <div>内容: 图片${images} 视频${videos} 文档${links}</div>
+        `;
+        
+        // 定位信息框，避免超出屏幕
+        let left = mouseX + 10;
+        let top = mouseY - 60;
+        
+        if (left + 300 > window.innerWidth) {
+            left = mouseX - 310;
+        }
+        if (top < 10) {
+            top = mouseY + 10;
+        }
+        
+        this.infoBox.style.left = left + 'px';
+        this.infoBox.style.top = top + 'px';
+        this.infoBox.style.display = 'block';
+    }
+    
+    async processSelectedElement(element) {
         const files = [];
         
-        // 在选择区域内查找元素
-        const allElements = document.querySelectorAll('*');
-        allElements.forEach((el, index) => {
-            const elRect = el.getBoundingClientRect();
+        // 在选择的元素内查找所有媒体文件
+        const allElements = element.querySelectorAll('*');
+        const elementsToCheck = [element, ...Array.from(allElements)];
+        
+        elementsToCheck.forEach((el, index) => {
+            // 检查图片
+            if (el.tagName === 'IMG') {
+                const src = el.src || el.dataset.src || el.getAttribute('data-original') || el.getAttribute('data-lazy');
+                if (src && this.isValidUrl(src)) {
+                    files.push({
+                        type: 'image',
+                        url: src,
+                        name: this.extractFilename(src) || `element_image_${index}`,
+                        element: el,
+                        size: this.getEstimatedSize(el),
+                        source: 'page',
+                        timestamp: Date.now(),
+                        timeString: this.formatTime(new Date())
+                    });
+                }
+            }
             
-            // 检查元素是否在选择区域内
-            if (this.isElementInArea(elRect, rect)) {
-                // 检查图片
-                if (el.tagName === 'IMG') {
-                    const src = el.src || el.dataset.src;
-                    if (src && this.isValidUrl(src)) {
-                        files.push({
-                            type: 'image',
-                            url: src,
-                            name: this.extractFilename(src) || `area_image_${index}`,
-                            element: el,
-                            size: this.getEstimatedSize(el)
-                        });
-                    }
+            // 检查背景图片
+            if (el.style && el.style.backgroundImage) {
+                const bgMatch = el.style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+                if (bgMatch && this.isValidUrl(bgMatch[1])) {
+                    files.push({
+                        type: 'image',
+                        url: bgMatch[1],
+                        name: this.extractFilename(bgMatch[1]) || `element_bg_${index}`,
+                        element: el,
+                        size: this.getEstimatedSize(el),
+                        source: 'page',
+                        timestamp: Date.now(),
+                        timeString: this.formatTime(new Date())
+                    });
+                }
+            }
+            
+            // 检查视频
+            if (el.tagName === 'VIDEO') {
+                const src = el.src || el.currentSrc;
+                if (src && this.isValidUrl(src)) {
+                    files.push({
+                        type: 'video',
+                        url: src,
+                        name: this.extractFilename(src) || `element_video_${index}`,
+                        element: el,
+                        size: this.getEstimatedSize(el),
+                        source: 'page',
+                        timestamp: Date.now(),
+                        timeString: this.formatTime(new Date())
+                    });
                 }
                 
-                // 检查视频
-                if (el.tagName === 'VIDEO') {
-                    const src = el.src || el.currentSrc;
-                    if (src && this.isValidUrl(src)) {
+                // 检查video标签内的source元素
+                const sources = el.querySelectorAll('source');
+                sources.forEach((source, sourceIndex) => {
+                    if (source.src && this.isValidUrl(source.src)) {
                         files.push({
                             type: 'video',
-                            url: src,
-                            name: this.extractFilename(src) || `area_video_${index}`,
+                            url: source.src,
+                            name: this.extractFilename(source.src) || `element_video_${index}_${sourceIndex}`,
                             element: el,
-                            size: this.getEstimatedSize(el)
+                            size: this.getEstimatedSize(el),
+                            source: 'page',
+                            timestamp: Date.now(),
+                            timeString: this.formatTime(new Date())
                         });
                     }
-                }
-                
-                // 检查链接
-                if (el.tagName === 'A' && el.href) {
-                    const extension = this.getFileExtension(el.href);
-                    const docExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx'];
-                    if (docExtensions.includes(extension.toLowerCase())) {
-                        files.push({
-                            type: 'document',
-                            url: el.href,
-                            name: this.extractFilename(el.href) || `area_doc_${index}`,
-                            element: el,
-                            size: null
-                        });
-                    }
+                });
+            }
+            
+            // 检查链接（文档）
+            if (el.tagName === 'A' && el.href) {
+                const extension = this.getFileExtension(el.href);
+                const docExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar'];
+                if (docExtensions.includes(extension.toLowerCase())) {
+                    files.push({
+                        type: 'document',
+                        url: el.href,
+                        name: this.extractFilename(el.href) || `element_doc_${index}`,
+                        element: el,
+                        size: null,
+                        source: 'page',
+                        timestamp: Date.now(),
+                        timeString: this.formatTime(new Date())
+                    });
                 }
             }
         });
         
-        // 发送结果到后台
-        if (files.length > 0) {
-            chrome.runtime.sendMessage({
-                action: 'areaSelectionComplete',
-                files: files
-            });
+        // 去重
+        const uniqueFiles = [];
+        const seenUrls = new Set();
+        files.forEach(file => {
+            if (!seenUrls.has(file.url)) {
+                seenUrls.add(file.url);
+                uniqueFiles.push(file);
+            }
+        });
+        
+        // 显示预览面板
+        if (uniqueFiles.length > 0) {
+            // 高亮选中的元素一段时间
+            element.style.outline = '3px solid #10b981';
+            element.style.outlineOffset = '2px';
+            setTimeout(() => {
+                element.style.outline = '';
+                element.style.outlineOffset = '';
+            }, 2000);
+            
+            this.showPreviewPanel(uniqueFiles, []);
         } else {
-            alert('在选择区域内未找到可下载的文件');
+            alert('在选择的元素内未找到可下载的文件');
         }
-    }
-    
-    isElementInArea(elRect, areaRect) {
-        return !(elRect.right < areaRect.left || 
-                 elRect.left > areaRect.right || 
-                 elRect.bottom < areaRect.top || 
-                 elRect.top > areaRect.bottom);
     }
     
     endAreaSelection() {
         this.isSelectionMode = false;
+        this.currentHighlightedElement = null;
         
-        if (this.selectionOverlay) {
-            document.body.removeChild(this.selectionOverlay);
-            this.selectionOverlay = null;
-            this.selectionBox = null;
+        // 恢复页面滚动
+        document.body.style.overflow = '';
+        
+        // 清理高亮覆盖层
+        if (this.highlightOverlay) {
+            document.body.removeChild(this.highlightOverlay);
+            this.highlightOverlay = null;
+        }
+        
+        // 清理信息框
+        if (this.infoBox) {
+            document.body.removeChild(this.infoBox);
+            this.infoBox = null;
+        }
+        
+        // 清理提示框
+        if (this.tipBox) {
+            document.body.removeChild(this.tipBox);
+            this.tipBox = null;
         }
         
         // 清理事件监听器
         if (this._selectionEvents) {
-            document.removeEventListener('keydown', this._selectionEvents.keyDown);
+            document.removeEventListener('mousemove', this._selectionEvents.mouseMove, true);
+            document.removeEventListener('click', this._selectionEvents.mouseClick, true);
+            document.removeEventListener('keydown', this._selectionEvents.keyDown, true);
+            document.removeEventListener('scroll', this._selectionEvents.preventDefault, true);
+            document.removeEventListener('wheel', this._selectionEvents.preventDefault, true);
             this._selectionEvents = null;
         }
     }

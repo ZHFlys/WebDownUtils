@@ -54,15 +54,11 @@ class XiaohongshuStrategy {
                 ]
             };
             
-            if (settings.includeImages) {
-                const images = await this.scanImages(selectors.images);
-                files.push(...images);
-            }
+            const images = await this.scanImages(selectors.images);
+            files.push(...images);
             
-            if (settings.includeVideos) {
-                const videos = await this.scanVideos(selectors.videos);
-                files.push(...videos);
-            }
+            const videos = await this.scanVideos(selectors.videos);
+            files.push(...videos);
             
             return { files: this.filterFiles(files, settings) };
         } catch (error) {
@@ -209,13 +205,8 @@ class WeiboStrategy {
             ]
         };
         
-        if (settings.includeImages) {
-            files.push(...this.scanBySelectors(selectors.images, 'image', 'weibo'));
-        }
-        
-        if (settings.includeVideos) {
-            files.push(...this.scanBySelectors(selectors.videos, 'video', 'weibo'));
-        }
+        files.push(...this.scanBySelectors(selectors.images, 'image', 'weibo'));
+        files.push(...this.scanBySelectors(selectors.videos, 'video', 'weibo'));
         
         return { files };
     }
@@ -262,13 +253,8 @@ class InstagramStrategy {
             ]
         };
         
-        if (settings.includeImages) {
-            files.push(...this.scanBySelectors(selectors.images, 'image', 'instagram'));
-        }
-        
-        if (settings.includeVideos) {
-            files.push(...this.scanBySelectors(selectors.videos, 'video', 'instagram'));
-        }
+        files.push(...this.scanBySelectors(selectors.images, 'image', 'instagram'));
+        files.push(...this.scanBySelectors(selectors.videos, 'video', 'instagram'));
         
         return { files };
     }
@@ -315,13 +301,8 @@ class TwitterStrategy {
             ]
         };
         
-        if (settings.includeImages) {
-            files.push(...this.scanBySelectors(selectors.images, 'image', 'twitter'));
-        }
-        
-        if (settings.includeVideos) {
-            files.push(...this.scanBySelectors(selectors.videos, 'video', 'twitter'));
-        }
+        files.push(...this.scanBySelectors(selectors.images, 'image', 'twitter'));
+        files.push(...this.scanBySelectors(selectors.videos, 'video', 'twitter'));
         
         return { files };
     }
@@ -369,9 +350,7 @@ class PinterestStrategy {
             ]
         };
         
-        if (settings.includeImages) {
-            files.push(...this.scanBySelectors(selectors.images, 'image', 'pinterest'));
-        }
+        files.push(...this.scanBySelectors(selectors.images, 'image', 'pinterest'));
         
         return { files };
     }
@@ -406,37 +385,33 @@ class DefaultStrategy {
     async scanPage(settings) {
         const files = [];
         
-        if (settings.includeImages) {
-            const images = document.querySelectorAll('img');
-            images.forEach((img, index) => {
-                const src = img.src || img.dataset.src;
-                if (src && this.isValidUrl(src)) {
-                    files.push({
-                        type: 'image',
-                        url: src,
-                        name: `image_${index}`,
-                        element: img,
-                        platform: 'default'
-                    });
-                }
-            });
-        }
+        const images = document.querySelectorAll('img');
+        images.forEach((img, index) => {
+            const src = img.src || img.dataset.src;
+            if (src && this.isValidUrl(src)) {
+                files.push({
+                    type: 'image',
+                    url: src,
+                    name: `image_${index}`,
+                    element: img,
+                    platform: 'default'
+                });
+            }
+        });
         
-        if (settings.includeVideos) {
-            const videos = document.querySelectorAll('video');
-            videos.forEach((video, index) => {
-                const src = video.src || video.currentSrc;
-                if (src && this.isValidUrl(src)) {
-                    files.push({
-                        type: 'video',
-                        url: src,
-                        name: `video_${index}`,
-                        element: video,
-                        platform: 'default'
-                    });
-                }
-            });
-        }
+        const videos = document.querySelectorAll('video');
+        videos.forEach((video, index) => {
+            const src = video.src || video.currentSrc;
+            if (src && this.isValidUrl(src)) {
+                files.push({
+                    type: 'video',
+                    url: src,
+                    name: `video_${index}`,
+                    element: video,
+                    platform: 'default'
+                });
+            }
+        });
         
         return { files };
     }

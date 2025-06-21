@@ -36,7 +36,7 @@ class WebDownloadHelper {
             fileSizeLimit: 100,
             includeImages: true,
             includeVideos: true,
-            includeDocuments: false
+            includeDocuments: true
         };
         
         const stored = await chrome.storage.sync.get(defaultSettings);
@@ -103,18 +103,7 @@ class WebDownloadHelper {
             });
         });
         
-        // 下载选项
-        document.getElementById('include-images').addEventListener('change', (e) => {
-            this.settings.includeImages = e.target.checked;
-        });
-        
-        document.getElementById('include-videos').addEventListener('change', (e) => {
-            this.settings.includeVideos = e.target.checked;
-        });
-        
-        document.getElementById('include-documents').addEventListener('change', (e) => {
-            this.settings.includeDocuments = e.target.checked;
-        });
+
         
         // 设置页面
         document.getElementById('save-path').addEventListener('input', (e) => {
@@ -193,11 +182,6 @@ class WebDownloadHelper {
     }
     
     updateUI() {
-        // 更新下载选项
-        document.getElementById('include-images').checked = this.settings.includeImages;
-        document.getElementById('include-videos').checked = this.settings.includeVideos;
-        document.getElementById('include-documents').checked = this.settings.includeDocuments;
-        
         // 更新设置
         document.getElementById('save-path').value = this.settings.savePath;
         document.getElementById('file-naming').value = this.settings.fileNaming;
@@ -471,7 +455,7 @@ class WebDownloadHelper {
             fileSizeLimit: 100,
             includeImages: true,
             includeVideos: true,
-            includeDocuments: false
+            includeDocuments: true
         };
         
         this.settings = defaultSettings;

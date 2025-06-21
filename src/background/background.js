@@ -263,9 +263,9 @@ class BackgroundService {
             autoDetectPlatform: true,
             maxFiles: 50,
             fileSizeLimit: 100,
-            includeImages: true,
-            includeVideos: true,
-            includeDocuments: false
+                    includeImages: true,
+        includeVideos: true,
+        includeDocuments: true
         };
         
         const stored = await chrome.storage.sync.get(defaultSettings);
