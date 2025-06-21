@@ -20,6 +20,9 @@ class BackgroundService {
                 case 'areaSelectionComplete':
                     this.handleAreaSelectionComplete(request.files, sender.tab);
                     break;
+                case 'startDownload':
+                    this.handleStartDownload(request.selectedFiles).then(sendResponse);
+                    return true;
                 case 'downloadFiles':
                     this.downloadFiles(request.files, request.settings).then(sendResponse);
                     return true;
@@ -100,6 +103,21 @@ class BackgroundService {
             title: 'Web批量下载助手',
             message: `找到 ${files.length} 个文件，开始下载...`
         });
+    }
+    
+    async handleStartDownload(selectedFiles) {
+        if (!selectedFiles || selectedFiles.length === 0) {
+            return { success: false, error: '没有选择文件' };
+        }
+        
+        try {
+            const settings = await this.getSettings();
+            const result = await this.downloadFiles(selectedFiles, settings);
+            return { success: true, result };
+        } catch (error) {
+            console.error('下载失败:', error);
+            return { success: false, error: error.message };
+        }
     }
     
     async downloadFiles(files, settings) {
@@ -239,6 +257,7 @@ class BackgroundService {
             autoDetectPlatform: true,
             maxFiles: 50,
             fileSizeLimit: 100,
+            zipThreshold: 3,
             downloadDelay: 0.5,
             includeImages: true,
             includeVideos: true,

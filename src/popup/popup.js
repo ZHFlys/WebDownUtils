@@ -9,6 +9,7 @@ class WebDownloadHelper {
             maxFiles: 50,
             fileSizeLimit: 100,
             downloadDelay: 0.5,
+            zipThreshold: 3,
             showFormatFilter: false,
             formats: {
                 // 图片格式
@@ -292,6 +293,7 @@ class WebDownloadHelper {
         document.getElementById('create-folders').checked = this.settings.createFolders;
         document.getElementById('max-files').value = this.settings.maxFiles;
         document.getElementById('file-size-limit').value = this.settings.fileSizeLimit;
+        document.getElementById('zip-threshold').value = this.settings.zipThreshold;
         document.getElementById('download-delay').value = this.settings.downloadDelay;
         document.getElementById('show-format-filter').checked = this.settings.showFormatFilter;
         
@@ -313,6 +315,7 @@ class WebDownloadHelper {
         this.settings.createFolders = document.getElementById('create-folders').checked;
         this.settings.maxFiles = parseInt(document.getElementById('max-files').value);
         this.settings.fileSizeLimit = parseInt(document.getElementById('file-size-limit').value);
+        this.settings.zipThreshold = parseInt(document.getElementById('zip-threshold').value);
         this.settings.downloadDelay = parseFloat(document.getElementById('download-delay').value);
         this.settings.showFormatFilter = document.getElementById('show-format-filter').checked;
         
@@ -350,6 +353,7 @@ class WebDownloadHelper {
                 createFolders: true,
                 maxFiles: 50,
                 fileSizeLimit: 100,
+                zipThreshold: 3,
                 downloadDelay: 0.5,
                 showFormatFilter: false,
                 formats: {

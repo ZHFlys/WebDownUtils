@@ -150,6 +150,11 @@
                     <input type="number" id="file-size-limit" value="100" min="1" max="1000">
                 </div>
                 <div class="setting-item">
+                    <label for="zip-threshold">打包下载阈值：</label>
+                    <input type="number" id="zip-threshold" value="3" min="2" max="50">
+                    <p class="setting-desc">文件数量达到此值时自动打包成ZIP下载，低于此值直接下载</p>
+                </div>
+                <div class="setting-item">
                     <label for="download-delay">脚本下载间隔(秒)：</label>
                     <input type="number" id="download-delay" value="0.5" min="0.1" max="10" step="0.1">
                     <p class="setting-desc">生成的脚本中文件下载之间的等待时间</p>

@@ -1043,7 +1043,7 @@ class ContentScanner {
                     <div class="download-button-group">
                         <button class="action-btn primary" id="confirm-download-preview">
                             <span class="btn-icon">⬇️</span>
-                            开始下载 (<span id="download-count-preview">0</span>)
+                            智能下载 (<span id="download-count-preview">0</span>)
                         </button>
                         <button class="download-mode-toggle" id="download-mode-toggle" title="下载模式选项">
                             <span class="dropdown-arrow">▼</span>
@@ -1052,10 +1052,11 @@ class ContentScanner {
                             <div class="download-mode-item" data-mode="direct">
                                 <span class="mode-icon">💾</span>
                                 <div class="mode-info">
-                                    <div class="mode-title">直接下载</div>
-                                    <div class="mode-desc">浏览器逐个下载文件</div>
+                                    <div class="mode-title">智能下载</div>
+                                    <div class="mode-desc">少量文件直接下载，多文件自动打包(可在设置中配置阈值)</div>
                                 </div>
                             </div>
+
                             <div class="download-mode-item" data-mode="links">
                                 <span class="mode-icon">📋</span>
                                 <div class="mode-info">
@@ -2056,6 +2057,10 @@ class ContentScanner {
                 background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
             }
             
+            .download-mode-item[data-mode="zip"]:hover {
+                background: linear-gradient(135deg, #fed7aa 0%, #fef3c7 100%);
+            }
+            
             .download-mode-item[data-mode="links"]:hover {
                 background: linear-gradient(135deg, #d1fae5 0%, #dcfce7 100%);
             }
@@ -2389,8 +2394,8 @@ class ContentScanner {
         this.previewPanel.querySelectorAll('.download-mode-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 const mode = e.currentTarget.dataset.mode;
-                this.startDownloadFromPreview(mode);
                 this.hideDownloadModeMenu();
+                this.startDownloadFromPreview(mode);
             });
         });
         
@@ -2495,15 +2500,26 @@ class ContentScanner {
         this.previewPanel.querySelector('#preview-count').textContent = `已选择 ${count} 个文件`;
         this.previewPanel.querySelector('#download-count-preview').textContent = count;
         
-        // 更新下载按钮状态
+        // 更新下载按钮状态和文字
         const confirmBtn = this.previewPanel.querySelector('#confirm-download-preview');
+        const zipThreshold = this.currentSettings?.zipThreshold || 3;
+        
         confirmBtn.disabled = count === 0;
         if (count === 0) {
             confirmBtn.style.opacity = '0.5';
             confirmBtn.style.cursor = 'not-allowed';
+            // 重置按钮文字
+            confirmBtn.innerHTML = `<span class="btn-icon">⬇️</span>智能下载 (<span id="download-count-preview">0</span>)`;
+        } else if (count < zipThreshold) {
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.cursor = 'pointer';
+            // 文件数量少于阈值，直接下载
+            confirmBtn.innerHTML = `<span class="btn-icon">⬇️</span>直接下载 (<span id="download-count-preview">${count}</span>)`;
         } else {
             confirmBtn.style.opacity = '1';
             confirmBtn.style.cursor = 'pointer';
+            // 文件数量达到阈值，打包下载
+            confirmBtn.innerHTML = `<span class="btn-icon">📦</span>打包下载 (<span id="download-count-preview">${count}</span>)`;
         }
     }
     
@@ -3135,9 +3151,9 @@ class ContentScanner {
         switch (mode) {
             case 'direct':
                 this.startDirectDownload();
-                // 只有直接下载才关闭预览窗口
-                this.hidePreviewPanel();
+                // 智能下载后保持预览窗口打开
                 break;
+
             case 'links':
                 this.saveLinksAsText();
                 break;
@@ -3154,17 +3170,32 @@ class ContentScanner {
                 this.generateCurlScript();
                 break;
             default:
+                // 默认使用智能下载模式
                 this.startDirectDownload();
-                this.hidePreviewPanel();
+                // 智能下载后保持预览窗口打开
         }
     }
     
     startDirectDownload() {
-        // 发送消息给background script开始下载
-        chrome.runtime.sendMessage({
-            action: 'startDownload',
-            selectedFiles: this.selectedFiles
-        });
+        // 智能下载逻辑：根据配置的阈值决定直接下载还是打包下载
+        const zipThreshold = this.currentSettings?.zipThreshold || 3;
+        
+        if (this.selectedFiles.length < zipThreshold) {
+            // 文件数量少于阈值，直接下载
+            chrome.runtime.sendMessage({
+                action: 'startDownload',
+                selectedFiles: this.selectedFiles
+            }, (response) => {
+                if (response && response.success) {
+                    this.showNotification(`开始下载 ${this.selectedFiles.length} 个文件...`, 'success');
+                } else {
+                    this.showNotification('下载失败: ' + (response?.error || '未知错误'), 'error');
+                }
+            });
+        } else {
+            // 文件数量达到或超过阈值，打包下载
+            this.downloadAsZip();
+        }
     }
     
     saveLinksAsText() {
@@ -4029,6 +4060,101 @@ class ContentScanner {
         if (this.networkRefreshInterval) {
             clearInterval(this.networkRefreshInterval);
             this.networkRefreshInterval = null;
+        }
+    }
+    
+    async downloadAsZip() {
+        if (!window.JSZip) {
+            this.showNotification('JSZip库未加载，无法创建压缩包', 'error');
+            return;
+        }
+        
+        if (this.selectedFiles.length === 0) {
+            this.showNotification('请选择要下载的文件', 'error');
+            return;
+        }
+        
+        // 显示进度提示
+        this.showNotification('正在创建压缩包，请稍候...', 'info');
+        
+        try {
+            const zip = new JSZip();
+            let successCount = 0;
+            let failCount = 0;
+            
+            // 创建一个Promise数组来并行下载文件
+            const downloadPromises = this.selectedFiles.map(async (file, index) => {
+                try {
+                    const fileName = this.ensureFileExtension(
+                        file.name || this.extractFilename(file.url) || `文件_${index + 1}`,
+                        file.url,
+                        file.type
+                    );
+                    
+                    // 下载文件
+                    const response = await fetch(file.url, {
+                        method: 'GET',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const blob = await response.blob();
+                    
+                    // 添加到ZIP
+                    zip.file(fileName, blob);
+                    successCount++;
+                    
+                    // 更新进度
+                    this.showNotification(`已处理 ${successCount + failCount}/${this.selectedFiles.length} 个文件`, 'info');
+                    
+                } catch (error) {
+                    console.error(`下载文件失败: ${file.url}`, error);
+                    failCount++;
+                }
+            });
+            
+            // 等待所有文件下载完成
+            await Promise.all(downloadPromises);
+            
+            if (successCount === 0) {
+                this.showNotification('没有文件下载成功，无法创建压缩包', 'error');
+                return;
+            }
+            
+            // 生成ZIP文件
+            this.showNotification('正在生成压缩包...', 'info');
+            const zipBlob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: {
+                    level: 6
+                }
+            });
+            
+            // 下载ZIP文件
+            const zipUrl = URL.createObjectURL(zipBlob);
+            const a = document.createElement('a');
+            a.href = zipUrl;
+            a.download = `文件打包_${this.formatDateForFilename()}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(zipUrl);
+            
+            // 显示完成信息
+            const message = failCount > 0 
+                ? `压缩包创建完成！成功: ${successCount}, 失败: ${failCount}`
+                : `压缩包创建完成！共包含 ${successCount} 个文件`;
+            this.showNotification(message, 'success');
+            
+        } catch (error) {
+            console.error('创建压缩包失败:', error);
+            this.showNotification('创建压缩包失败: ' + error.message, 'error');
         }
     }
 }
