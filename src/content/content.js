@@ -849,7 +849,13 @@ class ContentScanner {
     }
     
     showPreviewPanel(files, selectedFiles, settings) {
-        this.foundFiles = files || [];
+        // 为初始文件设置正确的来源标记
+        const initialFiles = (files || []).map(file => ({
+            ...file,
+            source: file.source || 'page' // 确保页面扫描的文件标记为页面来源
+        }));
+        
+        this.foundFiles = initialFiles;
         this.selectedFiles = selectedFiles || [];
         this.currentSettings = settings || {};
         
@@ -859,6 +865,10 @@ class ContentScanner {
         
         this.createPreviewPanel();
         this.updatePreviewContent();
+        
+        // 启动网络监听和定时刷新
+        this.startNetworkMonitoring();
+        this.setupNetworkFileRefresh();
     }
     
     hidePreviewPanel() {
@@ -1103,12 +1113,6 @@ class ContentScanner {
         this.addPreviewStyles();
         document.body.appendChild(this.previewPanel);
         this.setupPreviewEvents();
-        
-        // 自动启动网络监听
-        this.startNetworkMonitoring();
-        
-        // 设置定时刷新网络文件
-        this.setupNetworkFileRefresh();
     }
     
     addPreviewStyles() {
@@ -3037,10 +3041,11 @@ class ContentScanner {
                 })
             ]);
             
-            // 从scanPage结果中提取文件数组
-            const pageFiles = pageResult && pageResult.files ? pageResult.files : [];
-            
-
+            // 从scanPage结果中提取文件数组，并设置来源标记
+            const pageFiles = (pageResult && pageResult.files ? pageResult.files : []).map(file => ({
+                ...file,
+                source: file.source || 'page'
+            }));
             
             // 合并文件列表，去重
             const allFiles = this.mergeFiles(pageFiles, networkFiles || []);
@@ -4037,9 +4042,11 @@ class ContentScanner {
             });
             
             if (networkFiles && networkFiles.length > 0) {
-                // 合并现有页面文件和新的网络文件
-                const pageFiles = this.foundFiles.filter(file => file.source === 'page' || file.source === 'both');
-                const allFiles = this.mergeFiles(pageFiles, networkFiles);
+                // 保留所有现有文件（包括页面文件和之前的网络文件）
+                const existingFiles = this.foundFiles.filter(file => 
+                    file.source === 'page' || file.source === 'both' || file.source === 'network'
+                );
+                const allFiles = this.mergeFiles(existingFiles, networkFiles);
                 
                 // 检查是否有新文件
                 const oldCount = this.foundFiles.length;
