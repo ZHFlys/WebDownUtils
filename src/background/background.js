@@ -210,11 +210,20 @@ class BackgroundService {
         return 'unknown_site';
     }
     
-    getFileExtension(url) {
+    getFileExtension(urlOrFilename) {
         try {
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const filename = pathname.split('/').pop();
+            let filename;
+            
+            // 如果是URL，提取文件名
+            if (urlOrFilename.startsWith('http://') || urlOrFilename.startsWith('https://')) {
+                const urlObj = new URL(urlOrFilename);
+                const pathname = urlObj.pathname;
+                filename = pathname.split('/').pop();
+            } else {
+                // 如果是文件名，直接使用
+                filename = urlOrFilename;
+            }
+            
             if (filename && filename.includes('.')) {
                 return filename.split('.').pop();
             }
@@ -247,6 +256,67 @@ class BackgroundService {
         if (!filename) return false;
         const parts = filename.split('.');
         return parts.length > 1 && parts[parts.length - 1].length > 0;
+    }
+    
+    hasProperExtension(filename, mimeType) {
+        if (!filename || !mimeType) return false;
+        
+        const extension = this.getFileExtension(filename);
+        if (!extension) return false;
+        
+        const expectedExtension = this.getExtensionFromMimeType(mimeType);
+        return expectedExtension && extension.toLowerCase() === expectedExtension.toLowerCase();
+    }
+    
+    getExtensionFromMimeType(mimeType) {
+        if (!mimeType) return null;
+        
+        const mimeToExt = {
+            // 图片格式
+            'image/jpeg': 'jpg',
+            'image/jpg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'image/webp': 'webp',
+            'image/bmp': 'bmp',
+            'image/svg+xml': 'svg',
+            'image/tiff': 'tiff',
+            'image/ico': 'ico',
+            'image/x-icon': 'ico',
+            // 视频格式
+            'video/mp4': 'mp4',
+            'video/webm': 'webm',
+            'video/avi': 'avi',
+            'video/mov': 'mov',
+            'video/quicktime': 'mov',
+            'video/wmv': 'wmv',
+            'video/flv': 'flv',
+            'video/mkv': 'mkv',
+            'video/3gp': '3gp',
+            // 音频格式
+            'audio/mpeg': 'mp3',
+            'audio/mp3': 'mp3',
+            'audio/wav': 'wav',
+            'audio/x-wav': 'wav',
+            'audio/flac': 'flac',
+            'audio/aac': 'aac',
+            'audio/ogg': 'ogg',
+            'audio/m4a': 'm4a',
+            'audio/wma': 'wma',
+            // 文档格式
+            'application/pdf': 'pdf',
+            'application/msword': 'doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+            'application/vnd.ms-excel': 'xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+            'application/vnd.ms-powerpoint': 'ppt',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+            'application/zip': 'zip',
+            'application/x-rar': 'rar'
+        };
+        
+        const lowerMimeType = mimeType.toLowerCase().split(';')[0]; // 移除参数部分
+        return mimeToExt[lowerMimeType] || null;
     }
     
     async getSettings() {
@@ -289,10 +359,10 @@ class BackgroundService {
     }
     
     setupNetworkListeners() {
-        // 监听网络请求
+        // 监听网络请求 - 先基于URL判断可能的媒体文件
         chrome.webRequest.onBeforeRequest.addListener(
             (details) => {
-                if (this.isMediaFile(details.url)) {
+                if (this.isPotentialMediaFile(details.url)) {
                     this.addNetworkFile(details.tabId, details.url, details.type);
                 }
             },
@@ -300,10 +370,18 @@ class BackgroundService {
             ["requestBody"]
         );
         
-        // 监听响应头，获取文件大小等信息
+        // 监听响应头，获取文件大小等信息，并基于content-type最终确认
         chrome.webRequest.onResponseStarted.addListener(
             (details) => {
-                if (this.isMediaFile(details.url)) {
+                const contentType = this.getContentTypeFromHeaders(details.responseHeaders);
+                
+                // 如果是媒体文件的content-type，或者URL看起来像媒体文件
+                if (this.isMediaContentType(contentType) || this.isPotentialMediaFile(details.url)) {
+                    // 如果之前没有添加过，现在添加
+                    if (!this.hasNetworkFile(details.tabId, details.url)) {
+                        this.addNetworkFile(details.tabId, details.url, details.type);
+                    }
+                    // 更新文件信息
                     this.updateNetworkFileInfo(details.tabId, details.url, details.responseHeaders);
                 }
             },
@@ -317,7 +395,7 @@ class BackgroundService {
         });
     }
     
-    isMediaFile(url) {
+    isPotentialMediaFile(url) {
         try {
             const urlObj = new URL(url);
             const pathname = urlObj.pathname.toLowerCase();
@@ -334,10 +412,61 @@ class BackgroundService {
                 '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar'
             ];
             
-            return mediaExtensions.some(ext => pathname.endsWith(ext));
+            // 如果有明确的媒体文件扩展名，直接返回true
+            if (mediaExtensions.some(ext => pathname.endsWith(ext))) {
+                return true;
+            }
+            
+            // 对于没有扩展名的URL，检查路径特征
+            // 比如包含 /images/, /media/, /uploads/ 等路径的可能是媒体文件
+            const mediaPathPatterns = [
+                '/images/', '/image/', '/img/', '/pics/', '/pictures/',
+                '/media/', '/assets/', '/uploads/', '/files/',
+                '/video/', '/videos/', '/audio/', '/sounds/',
+                '/download/', '/attachment/'
+            ];
+            
+            return mediaPathPatterns.some(pattern => pathname.includes(pattern));
         } catch {
             return false;
         }
+    }
+    
+    isMediaContentType(contentType) {
+        if (!contentType) return false;
+        
+        const mediaTypes = [
+            // 图片类型
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 
+            'image/bmp', 'image/svg+xml', 'image/tiff', 'image/ico', 'image/x-icon',
+            // 视频类型
+            'video/mp4', 'video/webm', 'video/avi', 'video/mov', 'video/wmv',
+            'video/flv', 'video/mkv', 'video/3gp', 'video/quicktime',
+            // 音频类型
+            'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 'audio/aac',
+            'audio/ogg', 'audio/m4a', 'audio/wma', 'audio/x-wav',
+            // 文档类型
+            'application/pdf', 'application/msword', 'application/vnd.ms-excel',
+            'application/vnd.ms-powerpoint', 'application/zip', 'application/x-rar'
+        ];
+        
+        const lowerContentType = contentType.toLowerCase();
+        return mediaTypes.some(type => lowerContentType.includes(type));
+    }
+    
+    getContentTypeFromHeaders(headers) {
+        if (!headers) return null;
+        
+        const contentTypeHeader = headers.find(header => 
+            header.name.toLowerCase() === 'content-type'
+        );
+        
+        return contentTypeHeader ? contentTypeHeader.value : null;
+    }
+    
+    hasNetworkFile(tabId, url) {
+        const tabFiles = this.networkFiles.get(tabId);
+        return tabFiles && tabFiles.has(url);
     }
     
     addNetworkFile(tabId, url, requestType) {
@@ -382,13 +511,29 @@ class BackgroundService {
             );
             if (contentType) {
                 file.mimeType = contentType.value;
-                // 根据MIME类型更新文件类型
-                if (contentType.value.startsWith('video/')) {
-                    file.type = 'video';
-                } else if (contentType.value.startsWith('audio/')) {
-                    file.type = 'audio';
-                } else if (contentType.value.startsWith('image/')) {
+                const mimeType = contentType.value.toLowerCase();
+                
+                // 根据MIME类型更新文件类型，优先使用MIME类型判断
+                if (mimeType.startsWith('image/')) {
                     file.type = 'image';
+                } else if (mimeType.startsWith('video/')) {
+                    file.type = 'video';
+                } else if (mimeType.startsWith('audio/')) {
+                    file.type = 'audio';
+                } else if (mimeType.includes('pdf') || mimeType.includes('document') || 
+                          mimeType.includes('spreadsheet') || mimeType.includes('presentation') ||
+                          mimeType.includes('zip') || mimeType.includes('rar')) {
+                    file.type = 'document';
+                }
+                
+                // 如果文件名没有合适的扩展名，根据MIME类型添加
+                if (!this.hasProperExtension(file.name, mimeType)) {
+                    const extension = this.getExtensionFromMimeType(mimeType);
+                    if (extension) {
+                        // 移除旧扩展名（如果有的话）并添加新的
+                        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+                        file.name = `${nameWithoutExt}.${extension}`;
+                    }
                 }
             }
         }
