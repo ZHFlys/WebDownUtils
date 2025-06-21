@@ -204,14 +204,25 @@ class BackgroundService {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const baseName = file.name ? file.name.replace(/\.[^/.]+$/, '') : `file_${index}`;
         
+        let finalName;
         switch (settings.fileNaming) {
             case 'timestamp':
-                return `${timestamp}_${baseName}.${extension}`;
+                finalName = `${timestamp}_${baseName}.${extension}`;
+                break;
             case 'sequential':
-                return `${String(index + 1).padStart(3, '0')}_${baseName}.${extension}`;
+                finalName = `${String(index + 1).padStart(3, '0')}_${baseName}.${extension}`;
+                break;
             default:
-                return file.name || `${baseName}.${extension}`;
+                finalName = file.name || `${baseName}.${extension}`;
+                break;
         }
+        
+        // 确保文件名有后缀，如果没有就添加合适的后缀
+        if (!this.hasFileExtension(finalName)) {
+            finalName = `${finalName}.${extension}`;
+        }
+        
+        return finalName;
     }
     
     async getFolderName() {
@@ -239,6 +250,7 @@ class BackgroundService {
         switch (type) {
             case 'image': return 'jpg';
             case 'video': return 'mp4';
+            case 'audio': return 'mp3';
             case 'document': return 'pdf';
             default: return 'file';
         }
@@ -255,6 +267,12 @@ class BackgroundService {
         }
     }
     
+    hasFileExtension(filename) {
+        if (!filename) return false;
+        const parts = filename.split('.');
+        return parts.length > 1 && parts[parts.length - 1].length > 0;
+    }
+    
     async getSettings() {
         const defaultSettings = {
             savePath: 'Downloads/WebDownUtils',
@@ -263,9 +281,10 @@ class BackgroundService {
             autoDetectPlatform: true,
             maxFiles: 50,
             fileSizeLimit: 100,
-                    includeImages: true,
-        includeVideos: true,
-        includeDocuments: true
+            downloadDelay: 0.5,
+            includeImages: true,
+            includeVideos: true,
+            includeDocuments: true
         };
         
         const stored = await chrome.storage.sync.get(defaultSettings);
@@ -430,16 +449,27 @@ class BackgroundService {
             const segments = pathname.split('/').filter(s => s);
             const lastSegment = segments[segments.length - 1];
             
+            let filename;
             if (lastSegment && lastSegment.length > 0) {
-                return lastSegment;
+                filename = lastSegment;
+            } else {
+                // 如果没有文件名，使用域名和时间戳
+                const hostname = urlObj.hostname;
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+                filename = `${hostname}_${timestamp}`;
             }
             
-            // 如果没有文件名，使用域名和时间戳
-            const hostname = urlObj.hostname;
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-            return `${hostname}_${timestamp}`;
+            // 确保文件名有后缀，如果没有就添加合适的后缀
+            if (!this.hasFileExtension(filename)) {
+                const extension = this.getFileExtension(url) || this.getTypeExtension(this.getFileTypeFromUrl(url));
+                filename = `${filename}.${extension}`;
+            }
+            
+            return filename;
         } catch {
-            return `network_file_${Date.now()}`;
+            const timestamp = Date.now();
+            const extension = this.getFileExtension(url) || 'file';
+            return `network_file_${timestamp}.${extension}`;
         }
     }
     

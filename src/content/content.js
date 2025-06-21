@@ -12,6 +12,9 @@ class ContentScanner {
         this.currentSourceFilter = 'all'; // 一级过滤：来源
         this.currentTypeFilter = 'all';   // 二级过滤：类型
         this.currentSizeFilter = 'all';   // 三级过滤：大小
+        this.currentFormatFilter = 'all'; // 四级过滤：格式
+        this.currentSortBy = 'time';      // 排序方式：time, size, name
+        this.currentSortOrder = 'desc';   // 排序顺序：asc, desc
         this.customSizeRange = {          // 自定义大小范围
             min: 0,
             max: null,
@@ -42,7 +45,7 @@ class ContentScanner {
                     sendResponse({ success: true });
                     break;
                 case 'showPreview':
-                    this.showPreviewPanel(request.files, request.selectedFiles);
+                    this.showPreviewPanel(request.files, request.selectedFiles, request.settings);
                     sendResponse({ success: true });
                     break;
                 case 'hidePreview':
@@ -63,6 +66,9 @@ class ContentScanner {
             
             const videos = this.scanVideos();
             files.push(...videos);
+            
+            const audios = this.scanAudios();
+            files.push(...audios);
             
             const documents = this.scanDocuments();
             files.push(...documents);
@@ -157,6 +163,68 @@ class ContentScanner {
         });
 
         return videos;
+    }
+    
+    scanAudios() {
+        const audios = [];
+        const audioElements = document.querySelectorAll('audio');
+        const currentTime = new Date();
+        
+        audioElements.forEach((audio, index) => {
+            const src = audio.src || audio.currentSrc;
+            if (src && this.isValidUrl(src)) {
+                audios.push({
+                    type: 'audio',
+                    url: src,
+                    name: this.extractFilename(src) || `audio_${index}`,
+                    element: audio,
+                    size: this.getEstimatedSize(audio),
+                    timestamp: currentTime.getTime(),
+                    timeString: this.formatTime(currentTime)
+                });
+            }
+            
+            // 检查source元素
+            const sources = audio.querySelectorAll('source');
+            sources.forEach((source, sourceIndex) => {
+                if (source.src && this.isValidUrl(source.src)) {
+                    audios.push({
+                        type: 'audio',
+                        url: source.src,
+                        name: this.extractFilename(source.src) || `audio_${index}_${sourceIndex}`,
+                        element: audio,
+                        size: this.getEstimatedSize(audio),
+                        timestamp: currentTime.getTime(),
+                        timeString: this.formatTime(currentTime)
+                    });
+                }
+            });
+        });
+        
+        // 扫描链接中的音频文件
+        const links = document.querySelectorAll('a[href]');
+        const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'];
+        
+        links.forEach((link, index) => {
+            const href = link.href;
+            if (href && this.isValidUrl(href)) {
+                const extension = this.getFileExtension(href);
+                if (audioExtensions.includes(extension.toLowerCase())) {
+                    audios.push({
+                        type: 'audio',
+                        url: href,
+                        name: this.extractFilename(href) || `audio_link_${index}`,
+                        element: link,
+                        text: link.textContent.trim(),
+                        size: null,
+                        timestamp: currentTime.getTime(),
+                        timeString: this.formatTime(currentTime)
+                    });
+                }
+            }
+        });
+
+        return audios;
     }
     
     scanDocuments() {
@@ -386,12 +454,13 @@ class ContentScanner {
         // 计算元素内的媒体文件数量
         const images = element.querySelectorAll('img').length;
         const videos = element.querySelectorAll('video').length;
+        const audios = element.querySelectorAll('audio').length;
         const links = element.querySelectorAll('a[href*=".pdf"], a[href*=".doc"], a[href*=".docx"]').length;
         
         this.infoBox.innerHTML = `
             <div><strong>${tagName}${id}${className}</strong></div>
             <div>尺寸: ${Math.round(rect.width)} × ${Math.round(rect.height)}</div>
-            <div>内容: 图片${images} 视频${videos} 文档${links}</div>
+            <div>内容: 图片${images} 视频${videos} 音频${audios} 文档${links}</div>
         `;
         
         // 定位信息框，避免超出屏幕
@@ -484,6 +553,23 @@ class ContentScanner {
                         });
                     }
                 });
+            }
+            
+            // 检查音频
+            if (el.tagName === 'AUDIO') {
+                const src = el.src || el.currentSrc;
+                if (src && this.isValidUrl(src)) {
+                    files.push({
+                        type: 'audio',
+                        url: src,
+                        name: this.extractFilename(src) || `element_audio_${index}`,
+                        element: el,
+                        size: this.getEstimatedSize(el),
+                        source: 'page',
+                        timestamp: Date.now(),
+                        timeString: this.formatTime(new Date())
+                    });
+                }
             }
             
             // 检查链接（文档）
@@ -608,6 +694,34 @@ class ContentScanner {
         return parts.length > 1 ? parts.pop() : '';
     }
     
+    hasFileExtension(filename) {
+        if (!filename) return false;
+        const parts = filename.split('.');
+        return parts.length > 1 && parts[parts.length - 1].length > 0;
+    }
+    
+    getTypeExtension(type) {
+        switch (type) {
+            case 'image': return 'jpg';
+            case 'video': return 'mp4';
+            case 'audio': return 'mp3';
+            case 'document': return 'pdf';
+            default: return 'file';
+        }
+    }
+    
+    ensureFileExtension(filename, url, type) {
+        if (!filename) return 'unknown_file.file';
+        
+        if (this.hasFileExtension(filename)) {
+            return filename;
+        }
+        
+        // 没有后缀，尝试从URL获取后缀
+        const extension = this.getFileExtension(url) || this.getTypeExtension(type);
+        return `${filename}.${extension}`;
+    }
+    
     getEstimatedSize(element) {
         if (!element) return null;
         
@@ -700,6 +814,24 @@ class ContentScanner {
                     return 8 * 1024 * 1024; // 默认8MB
                 }
                 
+            case 'audio':
+                // 音频文件大小估算（假设3分钟）
+                if (url.toLowerCase().includes('.mp3')) {
+                    return 3 * 1024 * 1024; // 3MB
+                } else if (url.toLowerCase().includes('.wav')) {
+                    return 30 * 1024 * 1024; // 30MB (无损)
+                } else if (url.toLowerCase().includes('.flac')) {
+                    return 25 * 1024 * 1024; // 25MB (无损)
+                } else if (url.toLowerCase().includes('.aac') || url.toLowerCase().includes('.m4a')) {
+                    return 2.5 * 1024 * 1024; // 2.5MB
+                } else if (url.toLowerCase().includes('.ogg')) {
+                    return 2 * 1024 * 1024; // 2MB
+                } else if (url.toLowerCase().includes('.wma')) {
+                    return 3.5 * 1024 * 1024; // 3.5MB
+                } else {
+                    return 3 * 1024 * 1024; // 默认3MB
+                }
+                
             case 'document':
                 if (url.toLowerCase().includes('.pdf')) {
                     return 2 * 1024 * 1024; // 2MB
@@ -716,9 +848,10 @@ class ContentScanner {
         }
     }
     
-    showPreviewPanel(files, selectedFiles) {
+    showPreviewPanel(files, selectedFiles, settings) {
         this.foundFiles = files || [];
         this.selectedFiles = selectedFiles || [];
+        this.currentSettings = settings || {};
         
         if (this.previewPanel) {
             this.hidePreviewPanel();
@@ -744,6 +877,55 @@ class ContentScanner {
         this.cleanup();
     }
     
+    generateFormatFilterHTML() {
+        // 如果设置中禁用了格式筛选，返回空字符串
+        if (this.currentSettings && this.currentSettings.showFormatFilter === false) {
+            return '';
+        }
+        
+        return `
+            <div class="filter-row format-filters">
+                <div class="filter-group">
+                    <label class="filter-label">📄 格式筛选:</label>
+                    <select class="format-select" id="format-filter">
+                        <option value="all">全部格式</option>
+                        <optgroup label="图片格式">
+                            <option value="jpg">JPG</option>
+                            <option value="png">PNG</option>
+                            <option value="gif">GIF</option>
+                            <option value="webp">WebP</option>
+                            <option value="svg">SVG</option>
+                        </optgroup>
+                        <optgroup label="视频格式">
+                            <option value="mp4">MP4</option>
+                            <option value="webm">WebM</option>
+                            <option value="avi">AVI</option>
+                            <option value="mov">MOV</option>
+                            <option value="mkv">MKV</option>
+                        </optgroup>
+                        <optgroup label="音频格式">
+                            <option value="mp3">MP3</option>
+                            <option value="wav">WAV</option>
+                            <option value="flac">FLAC</option>
+                            <option value="aac">AAC</option>
+                            <option value="ogg">OGG</option>
+                            <option value="m4a">M4A</option>
+                        </optgroup>
+                        <optgroup label="文档格式">
+                            <option value="pdf">PDF</option>
+                            <option value="doc">DOC</option>
+                            <option value="docx">DOCX</option>
+                            <option value="xls">XLS</option>
+                            <option value="xlsx">XLSX</option>
+                            <option value="ppt">PPT</option>
+                            <option value="pptx">PPTX</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+
     createPreviewPanel() {
         // 创建主预览面板
         this.previewPanel = document.createElement('div');
@@ -790,6 +972,7 @@ class ContentScanner {
                                 <button class="filter-btn secondary active" data-type="all">全部类型</button>
                                 <button class="filter-btn secondary" data-type="image">图片</button>
                                 <button class="filter-btn secondary" data-type="video">视频</button>
+                                <button class="filter-btn secondary" data-type="audio">音频</button>
                                 <button class="filter-btn secondary" data-type="document">文档</button>
                             </div>
                         </div>
@@ -826,6 +1009,22 @@ class ContentScanner {
                                 <button class="apply-range-btn" id="apply-size-range">应用</button>
                             </div>
                         </div>
+                        ${this.generateFormatFilterHTML()}
+                        <div class="filter-row sort-filters">
+                            <div class="filter-group">
+                                <label class="filter-label">🔄 排序方式:</label>
+                                <select class="sort-select" id="sort-by">
+                                    <option value="time">按时间</option>
+                                    <option value="size">按大小</option>
+                                    <option value="name">按名称</option>
+                                    <option value="type">按类型</option>
+                                </select>
+                                <select class="sort-order" id="sort-order">
+                                    <option value="desc">降序 ↓</option>
+                                    <option value="asc">升序 ↑</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="action-row">
                             <button class="action-btn-small" id="refresh-files-preview">🔄 重新获取</button>
                             <button class="action-btn-small" id="select-all-preview">全选</button>
@@ -841,11 +1040,62 @@ class ContentScanner {
                 
                 <div class="preview-footer">
                     <button class="action-btn secondary" id="cancel-download-preview">关闭预览</button>
-                    <button class="action-btn primary" id="confirm-download-preview">
-                        <span class="btn-icon">⬇️</span>
-                        开始下载 (<span id="download-count-preview">0</span>)
-                    </button>
+                    <div class="download-button-group">
+                        <button class="action-btn primary" id="confirm-download-preview">
+                            <span class="btn-icon">⬇️</span>
+                            开始下载 (<span id="download-count-preview">0</span>)
+                        </button>
+                        <button class="download-mode-toggle" id="download-mode-toggle" title="下载模式选项">
+                            <span class="dropdown-arrow">▼</span>
+                        </button>
+                        <div class="download-mode-menu" id="download-mode-menu">
+                            <div class="download-mode-item" data-mode="direct">
+                                <span class="mode-icon">💾</span>
+                                <div class="mode-info">
+                                    <div class="mode-title">直接下载</div>
+                                    <div class="mode-desc">浏览器逐个下载文件</div>
+                                </div>
+                            </div>
+                            <div class="download-mode-item" data-mode="links">
+                                <span class="mode-icon">📋</span>
+                                <div class="mode-info">
+                                    <div class="mode-title">保存链接列表</div>
+                                    <div class="mode-desc">生成文本文件，一行一个链接</div>
+                                </div>
+                            </div>
+                            <div class="download-mode-item" data-mode="markdown">
+                                <span class="mode-icon">📝</span>
+                                <div class="mode-info">
+                                    <div class="mode-title">保存为Markdown</div>
+                                    <div class="mode-desc">生成带预览的Markdown文档</div>
+                                </div>
+                            </div>
+                            <div class="download-mode-item" data-mode="python">
+                                <span class="mode-icon">🐍</span>
+                                <div class="mode-info">
+                                    <div class="mode-title">Python下载脚本</div>
+                                    <div class="mode-desc">生成Python批量下载代码</div>
+                                </div>
+                            </div>
+                            <div class="download-mode-item" data-mode="batch">
+                                <span class="mode-icon">⚡</span>
+                                <div class="mode-info">
+                                    <div class="mode-title">批处理脚本</div>
+                                    <div class="mode-desc">生成Windows批处理下载命令</div>
+                                </div>
+                            </div>
+                            <div class="download-mode-item" data-mode="curl">
+                                <span class="mode-icon">🌐</span>
+                                <div class="mode-info">
+                                    <div class="mode-title">cURL命令</div>
+                                    <div class="mode-desc">生成cURL批量下载脚本</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+                
+
             </div>
         `;
         
@@ -1070,6 +1320,47 @@ class ContentScanner {
             .size-filters {
                 padding-top: 4px;
                 border-top: 1px solid #f1f5f9;
+            }
+            
+            .format-filters, .sort-filters {
+                padding-top: 4px;
+                border-top: 1px solid #f1f5f9;
+            }
+            
+            .filter-label {
+                font-size: 11px;
+                font-weight: 500;
+                color: #555;
+                white-space: nowrap;
+                margin-right: 4px;
+            }
+            
+            .format-select, .sort-select, .sort-order {
+                padding: 4px 6px;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                font-size: 11px;
+                background: white;
+                cursor: pointer;
+                color: #64748b;
+            }
+            
+            .format-select {
+                min-width: 100px;
+            }
+            
+            .sort-select {
+                min-width: 70px;
+            }
+            
+            .sort-order {
+                min-width: 65px;
+            }
+            
+            .format-select:focus, .sort-select:focus, .sort-order:focus {
+                outline: none;
+                border-color: #4f46e5;
+                box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
             }
             
             .action-row {
@@ -1649,6 +1940,144 @@ class ContentScanner {
                 flex-shrink: 0;
             }
             
+            .download-button-group {
+                position: relative;
+                display: flex;
+                align-items: center;
+            }
+            
+            .download-mode-toggle {
+                padding: 8px 6px;
+                border: none;
+                border-radius: 0 6px 6px 0;
+                background: linear-gradient(135deg, #3730a3 0%, #6b21a8 100%);
+                color: white;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                margin-left: -1px;
+                border-left: 1px solid rgba(255, 255, 255, 0.2);
+                min-width: 32px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .download-mode-toggle:hover {
+                background: linear-gradient(135deg, #312e81 0%, #581c87 100%);
+                transform: translateY(-1px);
+            }
+            
+            .dropdown-arrow {
+                font-size: 10px;
+                transition: transform 0.3s ease;
+            }
+            
+            .download-mode-toggle.active .dropdown-arrow {
+                transform: rotate(180deg);
+            }
+            
+            .action-btn.primary {
+                border-radius: 6px 0 0 6px;
+            }
+            
+            .download-mode-menu {
+                position: absolute;
+                bottom: 100%;
+                right: 0;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+                border: 1px solid #e2e8f0;
+                min-width: 280px;
+                z-index: 1000000;
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(10px);
+                transition: all 0.3s ease;
+                margin-bottom: 8px;
+            }
+            
+            .download-mode-menu.show {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0);
+            }
+            
+            .download-mode-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 16px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            
+            .download-mode-item:last-child {
+                border-bottom: none;
+                border-radius: 0 0 8px 8px;
+            }
+            
+            .download-mode-item:first-child {
+                border-radius: 8px 8px 0 0;
+            }
+            
+            .download-mode-item:hover {
+                background: #f8fafc;
+                transform: translateX(2px);
+            }
+            
+            .mode-icon {
+                font-size: 18px;
+                width: 24px;
+                text-align: center;
+                flex-shrink: 0;
+            }
+            
+            .mode-info {
+                flex: 1;
+            }
+            
+            .mode-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: #1e293b;
+                margin-bottom: 2px;
+            }
+            
+            .mode-desc {
+                font-size: 11px;
+                color: #64748b;
+                line-height: 1.3;
+            }
+            
+            .download-mode-item[data-mode="direct"]:hover {
+                background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+            }
+            
+            .download-mode-item[data-mode="links"]:hover {
+                background: linear-gradient(135deg, #d1fae5 0%, #dcfce7 100%);
+            }
+            
+            .download-mode-item[data-mode="markdown"]:hover {
+                background: linear-gradient(135deg, #fef3c7 0%, #fef9c3 100%);
+            }
+            
+            .download-mode-item[data-mode="python"]:hover {
+                background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+            }
+            
+            .download-mode-item[data-mode="batch"]:hover {
+                background: linear-gradient(135deg, #fce7f3 0%, #fdf2f8 100%);
+            }
+            
+            .download-mode-item[data-mode="curl"]:hover {
+                background: linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%);
+            }
+            
+
+            
             .action-btn {
                 padding: 8px 12px;
                 border: none;
@@ -1800,6 +2229,50 @@ class ContentScanner {
                      padding: 3px 6px;
                      min-width: 35px;
                  }
+                 
+                 .download-button-group {
+                     flex-direction: column;
+                     gap: 4px;
+                 }
+                 
+                 .action-btn.primary {
+                     border-radius: 6px;
+                     font-size: 11px;
+                     padding: 6px 10px;
+                 }
+                 
+                 .download-mode-toggle {
+                     border-radius: 6px;
+                     margin-left: 0;
+                     border-left: none;
+                     border-top: 1px solid rgba(255, 255, 255, 0.2);
+                     height: 28px;
+                     font-size: 10px;
+                 }
+                 
+                 .download-mode-menu {
+                     min-width: 260px;
+                     right: auto;
+                     left: 0;
+                 }
+                 
+                 .download-mode-item {
+                     padding: 10px 12px;
+                 }
+                 
+                 .mode-icon {
+                     font-size: 16px;
+                 }
+                 
+                 .mode-title {
+                     font-size: 12px;
+                 }
+                 
+                 .mode-desc {
+                     font-size: 10px;
+                 }
+                 
+
              }
         `;
         
@@ -1869,6 +2342,23 @@ class ContentScanner {
             this.applySizeRange();
         });
         
+        // 格式筛选（如果存在的话）
+        const formatFilter = this.previewPanel.querySelector('#format-filter');
+        if (formatFilter) {
+            formatFilter.addEventListener('change', (e) => {
+                this.switchFormatFilter(e.target.value);
+            });
+        }
+        
+        // 排序方式
+        this.previewPanel.querySelector('#sort-by').addEventListener('change', (e) => {
+            this.switchSortBy(e.target.value);
+        });
+        
+        this.previewPanel.querySelector('#sort-order').addEventListener('change', (e) => {
+            this.switchSortOrder(e.target.value);
+        });
+        
         // 筛选区域折叠按钮
         this.previewPanel.querySelector('#filter-toggle-btn').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1886,7 +2376,29 @@ class ContentScanner {
         });
         
         this.previewPanel.querySelector('#confirm-download-preview').addEventListener('click', () => {
-            this.startDownloadFromPreview();
+            this.startDownloadFromPreview('direct');
+        });
+        
+        // 下载模式切换按钮
+        this.previewPanel.querySelector('#download-mode-toggle').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleDownloadModeMenu();
+        });
+        
+        // 下载模式菜单项点击
+        this.previewPanel.querySelectorAll('.download-mode-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const mode = e.currentTarget.dataset.mode;
+                this.startDownloadFromPreview(mode);
+                this.hideDownloadModeMenu();
+            });
+        });
+        
+        // 点击其他地方关闭菜单
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.download-button-group')) {
+                this.hideDownloadModeMenu();
+            }
         });
         
         // 使用事件委托处理图片预览和复制链接
@@ -2088,8 +2600,46 @@ class ContentScanner {
             });
         }
         
-        // 按时间排序，新的在前面
-        return files.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        // 第四级过滤：按格式筛选
+        if (this.currentFormatFilter && this.currentFormatFilter !== 'all') {
+            files = files.filter(file => {
+                const extension = this.getFileExtension(file.url).toLowerCase();
+                return extension === this.currentFormatFilter.toLowerCase();
+            });
+        }
+        
+        // 排序处理
+        files = files.sort((a, b) => {
+            let comparison = 0;
+            
+            switch (this.currentSortBy) {
+                case 'time':
+                    comparison = (b.timestamp || 0) - (a.timestamp || 0);
+                    break;
+                case 'size':
+                    const sizeA = a.size || this.estimateFileSizeByType(a);
+                    const sizeB = b.size || this.estimateFileSizeByType(b);
+                    comparison = sizeB - sizeA;
+                    break;
+                case 'name':
+                    const nameA = (a.name || '').toLowerCase();
+                    const nameB = (b.name || '').toLowerCase();
+                    comparison = nameA.localeCompare(nameB);
+                    break;
+                case 'type':
+                    const typeA = a.type || '';
+                    const typeB = b.type || '';
+                    comparison = typeA.localeCompare(typeB);
+                    break;
+                default:
+                    comparison = (b.timestamp || 0) - (a.timestamp || 0);
+            }
+            
+            // 根据排序顺序调整结果
+            return this.currentSortOrder === 'asc' ? -comparison : comparison;
+        });
+        
+        return files;
     }
     
     createPreviewFileItem(file, index, isImage = false) {
@@ -2186,6 +2736,7 @@ class ContentScanner {
         switch (type) {
             case 'image': return '🖼️';
             case 'video': return '🎥';
+            case 'audio': return '🎵';
             case 'document': return '📄';
             default: return '📁';
         }
@@ -2267,7 +2818,7 @@ class ContentScanner {
         }
         
         if (this.currentTypeFilter && this.currentTypeFilter !== 'all') {
-            const typeMap = { 'image': '图片', 'video': '视频', 'document': '文档' };
+            const typeMap = { 'image': '图片', 'video': '视频', 'audio': '音频', 'document': '文档' };
             activeFilters.push(typeMap[this.currentTypeFilter] || this.currentTypeFilter);
         }
         
@@ -2279,6 +2830,26 @@ class ContentScanner {
                 'custom': '自定义大小'
             };
             activeFilters.push(sizeMap[this.currentSizeFilter] || this.currentSizeFilter);
+        }
+        
+        if (this.currentFormatFilter && this.currentFormatFilter !== 'all') {
+            activeFilters.push(this.currentFormatFilter.toUpperCase() + '格式');
+        }
+        
+        // 添加排序信息
+        if (this.currentSortBy !== 'time' || this.currentSortOrder !== 'desc') {
+            const sortMap = {
+                'time': '时间',
+                'size': '大小', 
+                'name': '名称',
+                'type': '类型'
+            };
+            const orderMap = {
+                'desc': '↓',
+                'asc': '↑'
+            };
+            const sortText = `${sortMap[this.currentSortBy] || this.currentSortBy}${orderMap[this.currentSortOrder] || ''}`;
+            activeFilters.push(`排序:${sortText}`);
         }
         
         if (activeFilters.length > 0) {
@@ -2333,6 +2904,24 @@ class ContentScanner {
             rangeRow.style.display = 'none';
         }
         
+        this.renderPreviewFileList();
+        this.updateFilterStatus();
+    }
+    
+    switchFormatFilter(format) {
+        this.currentFormatFilter = format;
+        this.renderPreviewFileList();
+        this.updateFilterStatus();
+    }
+    
+    switchSortBy(sortBy) {
+        this.currentSortBy = sortBy;
+        this.renderPreviewFileList();
+        this.updateFilterStatus();
+    }
+    
+    switchSortOrder(sortOrder) {
+        this.currentSortOrder = sortOrder;
         this.renderPreviewFileList();
         this.updateFilterStatus();
     }
@@ -2515,19 +3104,466 @@ class ContentScanner {
         return Array.from(fileMap.values());
     }
     
-    startDownloadFromPreview() {
+    toggleDownloadModeMenu() {
+        const menu = this.previewPanel.querySelector('#download-mode-menu');
+        const toggle = this.previewPanel.querySelector('#download-mode-toggle');
+        
+        if (menu.classList.contains('show')) {
+            this.hideDownloadModeMenu();
+        } else {
+            menu.classList.add('show');
+            toggle.classList.add('active');
+        }
+    }
+    
+    hideDownloadModeMenu() {
+        const menu = this.previewPanel.querySelector('#download-mode-menu');
+        const toggle = this.previewPanel.querySelector('#download-mode-toggle');
+        
+        if (menu) {
+            menu.classList.remove('show');
+            toggle.classList.remove('active');
+        }
+    }
+    
+    startDownloadFromPreview(mode = 'direct') {
         if (this.selectedFiles.length === 0) {
             alert('请至少选择一个文件进行下载');
             return;
         }
         
+        switch (mode) {
+            case 'direct':
+                this.startDirectDownload();
+                // 只有直接下载才关闭预览窗口
+                this.hidePreviewPanel();
+                break;
+            case 'links':
+                this.saveLinksAsText();
+                break;
+            case 'markdown':
+                this.saveAsMarkdown();
+                break;
+            case 'python':
+                this.generatePythonScript();
+                break;
+            case 'batch':
+                this.generateBatchScript();
+                break;
+            case 'curl':
+                this.generateCurlScript();
+                break;
+            default:
+                this.startDirectDownload();
+                this.hidePreviewPanel();
+        }
+    }
+    
+    startDirectDownload() {
         // 发送消息给background script开始下载
         chrome.runtime.sendMessage({
             action: 'startDownload',
             selectedFiles: this.selectedFiles
         });
+    }
+    
+    saveLinksAsText() {
+        const timestamp = new Date().toLocaleString('zh-CN');
+        const currentUrl = window.location.href;
         
-        this.hidePreviewPanel();
+        let content = `# 文件列表\n`;
+        content += `# 生成时间: ${timestamp}\n`;
+        content += `# 来源页面: ${currentUrl}\n`;
+        content += `# 文件数量: ${this.selectedFiles.length}\n`;
+        content += `# ========================================\n\n`;
+        
+        this.selectedFiles.forEach((file, index) => {
+            const fileName = file.name || this.extractFilename(file.url) || `文件_${index + 1}`;
+            content += `${file.url}\n`;
+            content += `\n`;
+        });
+        
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `文件列表_${this.formatDateForFilename()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    saveAsMarkdown() {
+        const currentUrl = window.location.href;
+        const timestamp = new Date().toLocaleString('zh-CN');
+        
+        let markdown = `# 文件列表\n`;
+        markdown += `# 生成时间: ${timestamp}\n`;
+        markdown += `# 来源页面: ${currentUrl}\n`;
+        markdown += `# 文件数量: ${this.selectedFiles.length}\n`;
+        markdown += `# ========================================\n\n`;
+        
+        // 简单的文件列表格式，和文本文件保持一致
+        this.selectedFiles.forEach((file, index) => {
+            const fileName = file.name || this.extractFilename(file.url) || `文件_${index + 1}`;
+            markdown += `${file.url}\n`;
+            markdown += `\n`;
+        });
+        
+        const blob = new Blob([markdown], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `文件列表_${this.formatDateForFilename()}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    generatePythonScript() {
+        const timestamp = new Date().toLocaleString('zh-CN');
+        const currentUrl = window.location.href;
+        const fileName = `批量下载_${this.formatDateForFilename()}.py`;
+        const downloadDelay = this.currentSettings?.downloadDelay || 0.5;
+        
+        let script = `#!/usr/bin/env python3\n`;
+        script += `# -*- coding: utf-8 -*-\n`;
+        script += `"""\n`;
+        script += `WebDownUtils - 批量文件下载脚本\n`;
+        script += `\n`;
+        script += `官网: https://webdownutils.haoapk.cn\n`;
+        script += `联系: haoziu@163.com\n`;
+        script += `\n`;
+        script += `生成时间: ${timestamp}\n`;
+        script += `来源页面: ${currentUrl}\n`;
+        script += `文件数量: ${this.selectedFiles.length}\n`;
+        script += `"""\n\n`;
+        
+        script += `import os\n`;
+        script += `import requests\n`;
+        script += `from urllib.parse import urlparse, unquote\n`;
+        script += `import time\n\n`;
+        
+        script += `def download_file(url, filename, folder='downloads'):\n`;
+        script += `    """下载单个文件"""\n`;
+        script += `    try:\n`;
+        script += `        # 创建下载文件夹\n`;
+        script += `        if not os.path.exists(folder):\n`;
+        script += `            os.makedirs(folder)\n\n`;
+        
+        script += `        # 设置请求头\n`;
+        script += `        headers = {\n`;
+        script += `            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'\n`;
+        script += `        }\n\n`;
+        
+        script += `        print(f"正在下载: {filename}")\n`;
+        script += `        response = requests.get(url, headers=headers, stream=True)\n`;
+        script += `        response.raise_for_status()\n\n`;
+        
+        script += `        filepath = os.path.join(folder, filename)\n`;
+        script += `        with open(filepath, 'wb') as f:\n`;
+        script += `            for chunk in response.iter_content(chunk_size=8192):\n`;
+        script += `                f.write(chunk)\n\n`;
+        
+        script += `        print(f"下载完成: {filepath}")\n`;
+        script += `        return True\n\n`;
+        
+        script += `    except Exception as e:\n`;
+        script += `        print(f"下载失败 {filename}: {str(e)}")\n`;
+        script += `        return False\n\n`;
+        
+        script += `def main():\n`;
+        script += `    """主函数"""\n`;
+        script += `    files = [\n`;
+        
+        this.selectedFiles.forEach(file => {
+            const rawFileName = file.name || this.extractFilename(file.url) || 'unknown_file';
+            const fileName = this.ensureFileExtension(rawFileName, file.url, file.type);
+            script += `        ("${file.url}", "${fileName}"),\n`;
+        });
+        
+        script += `    ]\n\n`;
+        
+        script += `    print(f"开始下载 {len(files)} 个文件...")\n`;
+        script += `    success_count = 0\n`;
+        script += `    \n`;
+        script += `    for url, filename in files:\n`;
+        script += `        if download_file(url, filename):\n`;
+        script += `            success_count += 1\n`;
+        script += `        time.sleep(${downloadDelay})  # 避免请求过快\n\n`;
+        
+        script += `    print(f"\\n下载完成！成功: {success_count}/{len(files)}")\n\n`;
+        
+        script += `if __name__ == "__main__":\n`;
+        script += `    main()\n`;
+        
+        // 下载文件
+        const blob = new Blob([script], { type: 'text/python' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // 复制执行命令到剪贴板
+        const command = `python3 ${fileName}`;
+        this.copyCommandToClipboard(command, 'Python执行命令已复制到剪贴板');
+    }
+    
+    generateBatchScript() {
+        const timestamp = new Date().toLocaleString('zh-CN');
+        const currentUrl = window.location.href;
+        const fileName = `批量下载_${this.formatDateForFilename()}.bat`;
+        const downloadDelay = this.currentSettings?.downloadDelay || 0.5;
+        
+        let script = `@echo off\n`;
+        script += `chcp 65001 >nul\n`;
+        script += `rem ========================================\n`;
+        script += `rem WebDownUtils - 批量文件下载脚本\n`;
+        script += `rem 官网: https://webdownutils.haoapk.cn\n`;
+        script += `rem 联系: haoziu@163.com\n`;
+        script += `rem ========================================\n`;
+        script += `rem 生成时间: ${timestamp}\n`;
+        script += `rem 来源页面: ${currentUrl}\n`;
+        script += `rem 文件数量: ${this.selectedFiles.length}\n\n`;
+        
+        script += `echo 开始批量下载文件...\n`;
+        script += `echo.\n\n`;
+        
+        script += `rem 创建下载文件夹\n`;
+        script += `if not exist "downloads" mkdir downloads\n\n`;
+        
+        this.selectedFiles.forEach((file, index) => {
+            const rawFileName = file.name || this.extractFilename(file.url) || `file_${index + 1}`;
+            const fileName = this.ensureFileExtension(rawFileName, file.url, file.type);
+            script += `echo 正在下载: ${fileName}\n`;
+            script += `curl -L -o "downloads\\${fileName}" "${file.url}"\n`;
+            script += `if %errorlevel% equ 0 (\n`;
+            script += `    echo 下载成功: ${fileName}\n`;
+            script += `) else (\n`;
+            script += `    echo 下载失败: ${fileName}\n`;
+            script += `)\n`;
+            script += `timeout /t ${Math.ceil(downloadDelay)} >nul\n`;
+            script += `echo.\n\n`;
+        });
+        
+        script += `echo 所有下载任务已完成！\n`;
+        script += `pause\n`;
+        
+        // 下载文件
+        const blob = new Blob([script], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // 复制执行命令到剪贴板
+        const command = `"${fileName}"`;
+        this.copyCommandToClipboard(command, '批处理执行命令已复制到剪贴板');
+    }
+    
+    generateCurlScript() {
+        const timestamp = new Date().toLocaleString('zh-CN');
+        const currentUrl = window.location.href;
+        const fileName = `批量下载_${this.formatDateForFilename()}.sh`;
+        const downloadDelay = this.currentSettings?.downloadDelay || 0.5;
+        
+        let script = `#!/bin/bash\n`;
+        script += `# ========================================\n`;
+        script += `# WebDownUtils - 批量文件下载脚本 (cURL)\n`;
+        script += `# 官网: https://webdownutils.haoapk.cn\n`;
+        script += `# 联系: haoziu@163.com\n`;
+        script += `# ========================================\n`;
+        script += `# 生成时间: ${timestamp}\n`;
+        script += `# 来源页面: ${currentUrl}\n`;
+        script += `# 文件数量: ${this.selectedFiles.length}\n\n`;
+        
+        script += `echo "开始批量下载文件..."\n`;
+        script += `echo ""\n\n`;
+        
+        script += `# 创建下载文件夹\n`;
+        script += `mkdir -p downloads\n\n`;
+        
+        script += `# 设置变量\n`;
+        script += `SUCCESS_COUNT=0\n`;
+        script += `TOTAL_COUNT=${this.selectedFiles.length}\n\n`;
+        
+        this.selectedFiles.forEach((file, index) => {
+            const rawFileName = file.name || this.extractFilename(file.url) || `file_${index + 1}`;
+            const fileName = this.ensureFileExtension(rawFileName, file.url, file.type);
+            script += `echo "正在下载: ${fileName}"\n`;
+            script += `if curl -L -o "downloads/${fileName}" "${file.url}"; then\n`;
+            script += `    echo "✅ 下载成功: ${fileName}"\n`;
+            script += `    ((SUCCESS_COUNT++))\n`;
+            script += `else\n`;
+            script += `    echo "❌ 下载失败: ${fileName}"\n`;
+            script += `fi\n`;
+            script += `echo ""\n`;
+            script += `sleep ${downloadDelay}\n\n`;
+        });
+        
+        script += `echo "下载完成！成功: $SUCCESS_COUNT/$TOTAL_COUNT"\n`;
+        
+        // 下载文件
+        const blob = new Blob([script], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // 复制执行命令到剪贴板
+        const command = `chmod +x ${fileName} && ./${fileName}`;
+        this.copyCommandToClipboard(command, 'cURL执行命令已复制到剪贴板');
+    }
+    
+    formatDateForFilename() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        const day = now.getDate().toString().padStart(2, '0');
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        return `${year}${month}${day}_${hours}${minutes}`;
+    }
+    
+    copyCommandToClipboard(command, successMessage) {
+        navigator.clipboard.writeText(command).then(() => {
+            this.showNotification(successMessage, 'success');
+        }).catch(() => {
+            // 如果剪贴板API失败，尝试使用传统方法
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = command;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                this.showNotification(successMessage, 'success');
+            } catch (err) {
+                this.showNotification('复制失败，请手动复制命令', 'error');
+                console.error('复制到剪贴板失败:', err);
+            }
+        });
+    }
+    
+    showNotification(message, type = 'info') {
+        // 移除现有通知
+        const existingNotification = document.getElementById('web-download-notification');
+        if (existingNotification) {
+            document.body.removeChild(existingNotification);
+        }
+        
+        // 创建新通知
+        const notification = document.createElement('div');
+        notification.id = 'web-download-notification';
+        notification.className = `web-download-notification ${type}`;
+        
+        const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-icon">${icon}</span>
+                <span class="notification-message">${message}</span>
+            </div>
+        `;
+        
+        // 添加样式
+        if (!document.getElementById('web-download-notification-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'web-download-notification-styles';
+            styles.textContent = `
+                .web-download-notification {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+                    z-index: 10000000;
+                    padding: 12px 16px;
+                    border-left: 4px solid #3b82f6;
+                    animation: slideInRight 0.3s ease, fadeOut 0.3s ease 2.7s;
+                    max-width: 300px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                }
+                
+                .web-download-notification.success {
+                    border-left-color: #10b981;
+                }
+                
+                .web-download-notification.error {
+                    border-left-color: #ef4444;
+                }
+                
+                .notification-content {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                
+                .notification-icon {
+                    font-size: 16px;
+                    flex-shrink: 0;
+                }
+                
+                .notification-message {
+                    font-size: 13px;
+                    color: #374151;
+                    line-height: 1.4;
+                }
+                
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+                
+                @keyframes fadeOut {
+                    from {
+                        opacity: 1;
+                        transform: translateX(0);
+                    }
+                    to {
+                        opacity: 0;
+                        transform: translateX(100%);
+                    }
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        document.body.appendChild(notification);
+        
+        // 3秒后自动移除
+        setTimeout(() => {
+            if (notification.parentNode) {
+                document.body.removeChild(notification);
+            }
+        }, 3000);
     }
     
     showImagePreview(imageUrl) {

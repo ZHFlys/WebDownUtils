@@ -7,7 +7,38 @@ class WebDownloadHelper {
             fileNaming: 'original',
             createFolders: true,
             maxFiles: 50,
-            fileSizeLimit: 100
+            fileSizeLimit: 100,
+            downloadDelay: 0.5,
+            showFormatFilter: false,
+            formats: {
+                // 图片格式
+                jpg: true,
+                png: true,
+                gif: true,
+                webp: true,
+                svg: true,
+                // 视频格式
+                mp4: true,
+                webm: true,
+                avi: true,
+                mov: true,
+                mkv: true,
+                // 音频格式
+                mp3: true,
+                wav: true,
+                flac: true,
+                aac: true,
+                ogg: true,
+                m4a: true,
+                // 文档格式
+                pdf: true,
+                doc: true,
+                docx: true,
+                xls: true,
+                xlsx: true,
+                ppt: true,
+                pptx: true
+            }
         };
         this.init();
     }
@@ -159,15 +190,27 @@ class WebDownloadHelper {
     generateFilename(file, index) {
         const originalName = file.name || `file_${index}`;
         
+        let finalName;
         switch (this.settings.fileNaming) {
             case 'timestamp':
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                return `${timestamp}_${originalName}`;
+                finalName = `${timestamp}_${originalName}`;
+                break;
             case 'sequential':
-                return `${index.toString().padStart(3, '0')}_${originalName}`;
+                finalName = `${index.toString().padStart(3, '0')}_${originalName}`;
+                break;
             default:
-                return originalName;
+                finalName = originalName;
+                break;
         }
+        
+        // 确保文件名有后缀，如果没有就添加合适的后缀
+        if (!this.hasFileExtension(finalName)) {
+            const extension = this.getFileExtension(file.url) || this.getTypeExtension(file.type);
+            finalName = `${finalName}.${extension}`;
+        }
+        
+        return finalName;
     }
     
     getDomainName() {
@@ -176,6 +219,34 @@ class WebDownloadHelper {
             return url.hostname.replace(/^www\./, '');
         } catch {
             return 'unknown';
+        }
+    }
+    
+    hasFileExtension(filename) {
+        if (!filename) return false;
+        const parts = filename.split('.');
+        return parts.length > 1 && parts[parts.length - 1].length > 0;
+    }
+    
+    getFileExtension(url) {
+        try {
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname;
+            const filename = pathname.split('/').pop();
+            if (filename && filename.includes('.')) {
+                return filename.split('.').pop();
+            }
+        } catch {}
+        return '';
+    }
+    
+    getTypeExtension(type) {
+        switch (type) {
+            case 'image': return 'jpg';
+            case 'video': return 'mp4';
+            case 'audio': return 'mp3';
+            case 'document': return 'pdf';
+            default: return 'file';
         }
     }
     
@@ -207,21 +278,45 @@ class WebDownloadHelper {
         const result = await chrome.storage.sync.get(this.settings);
         this.settings = { ...this.settings, ...result };
         
-        // 更新UI
+        // 更新基础设置UI
         document.getElementById('save-path').value = this.settings.savePath;
         document.getElementById('file-naming').value = this.settings.fileNaming;
         document.getElementById('create-folders').checked = this.settings.createFolders;
         document.getElementById('max-files').value = this.settings.maxFiles;
         document.getElementById('file-size-limit').value = this.settings.fileSizeLimit;
+        document.getElementById('download-delay').value = this.settings.downloadDelay;
+        document.getElementById('show-format-filter').checked = this.settings.showFormatFilter;
+        
+        // 更新格式配置UI
+        if (this.settings.formats) {
+            Object.keys(this.settings.formats).forEach(format => {
+                const checkbox = document.getElementById(`format-${format}`);
+                if (checkbox) {
+                    checkbox.checked = this.settings.formats[format];
+                }
+            });
+        }
     }
     
     async saveSettings() {
-        // 从UI获取设置
+        // 从UI获取基础设置
         this.settings.savePath = document.getElementById('save-path').value;
         this.settings.fileNaming = document.getElementById('file-naming').value;
         this.settings.createFolders = document.getElementById('create-folders').checked;
         this.settings.maxFiles = parseInt(document.getElementById('max-files').value);
         this.settings.fileSizeLimit = parseInt(document.getElementById('file-size-limit').value);
+        this.settings.downloadDelay = parseFloat(document.getElementById('download-delay').value);
+        this.settings.showFormatFilter = document.getElementById('show-format-filter').checked;
+        
+        // 从UI获取格式配置
+        if (this.settings.formats) {
+            Object.keys(this.settings.formats).forEach(format => {
+                const checkbox = document.getElementById(`format-${format}`);
+                if (checkbox) {
+                    this.settings.formats[format] = checkbox.checked;
+                }
+            });
+        }
         
         // 保存到Chrome存储
         await chrome.storage.sync.set(this.settings);
@@ -246,7 +341,38 @@ class WebDownloadHelper {
                 fileNaming: 'original',
                 createFolders: true,
                 maxFiles: 50,
-                fileSizeLimit: 100
+                fileSizeLimit: 100,
+                downloadDelay: 0.5,
+                showFormatFilter: false,
+                formats: {
+                    // 图片格式
+                    jpg: true,
+                    png: true,
+                    gif: true,
+                    webp: true,
+                    svg: true,
+                    // 视频格式
+                    mp4: true,
+                    webm: true,
+                    avi: true,
+                    mov: true,
+                    mkv: true,
+                    // 音频格式
+                    mp3: true,
+                    wav: true,
+                    flac: true,
+                    aac: true,
+                    ogg: true,
+                    m4a: true,
+                    // 文档格式
+                    pdf: true,
+                    doc: true,
+                    docx: true,
+                    xls: true,
+                    xlsx: true,
+                    ppt: true,
+                    pptx: true
+                }
             };
             
             // 清除存储的设置
@@ -272,7 +398,8 @@ class WebDownloadHelper {
                 await chrome.tabs.sendMessage(this.currentTab.id, {
                     action: 'showPreview',
                     files: response.files,
-                    selectedFiles: []
+                    selectedFiles: [],
+                    settings: this.settings
                 });
                 
                 // 成功后关闭弹窗

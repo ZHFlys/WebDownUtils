@@ -16,6 +16,8 @@
         <div class="tabs">
             <button class="tab-btn active" data-tab="download">下载模式</button>
             <button class="tab-btn" data-tab="settings">设置</button>
+            <button class="tab-btn" data-tab="platforms">平台拓展</button>
+            <button class="tab-btn" data-tab="about">关于</button>
         </div>
         
         <div class="tab-content" id="download-tab">
@@ -88,6 +90,65 @@
             </div>
             
             <div class="settings-section">
+                <h3>文件格式配置</h3>
+                <div class="setting-item">
+                    <label>图片格式：</label>
+                    <div class="format-checkboxes">
+                        <label><input type="checkbox" id="format-jpg" checked> JPG</label>
+                        <label><input type="checkbox" id="format-png" checked> PNG</label>
+                        <label><input type="checkbox" id="format-gif" checked> GIF</label>
+                        <label><input type="checkbox" id="format-webp" checked> WebP</label>
+                        <label><input type="checkbox" id="format-svg" checked> SVG</label>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>视频格式：</label>
+                    <div class="format-checkboxes">
+                        <label><input type="checkbox" id="format-mp4" checked> MP4</label>
+                        <label><input type="checkbox" id="format-webm" checked> WebM</label>
+                        <label><input type="checkbox" id="format-avi" checked> AVI</label>
+                        <label><input type="checkbox" id="format-mov" checked> MOV</label>
+                        <label><input type="checkbox" id="format-mkv" checked> MKV</label>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>音频格式：</label>
+                    <div class="format-checkboxes">
+                        <label><input type="checkbox" id="format-mp3" checked> MP3</label>
+                        <label><input type="checkbox" id="format-wav" checked> WAV</label>
+                        <label><input type="checkbox" id="format-flac" checked> FLAC</label>
+                        <label><input type="checkbox" id="format-aac" checked> AAC</label>
+                        <label><input type="checkbox" id="format-ogg" checked> OGG</label>
+                        <label><input type="checkbox" id="format-m4a" checked> M4A</label>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>文档格式：</label>
+                    <div class="format-checkboxes">
+                        <label><input type="checkbox" id="format-pdf" checked> PDF</label>
+                        <label><input type="checkbox" id="format-doc" checked> DOC</label>
+                        <label><input type="checkbox" id="format-docx" checked> DOCX</label>
+                        <label><input type="checkbox" id="format-xls" checked> XLS</label>
+                        <label><input type="checkbox" id="format-xlsx" checked> XLSX</label>
+                        <label><input type="checkbox" id="format-ppt" checked> PPT</label>
+                        <label><input type="checkbox" id="format-pptx" checked> PPTX</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h3>界面设置</h3>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="show-format-filter" checked>
+                        <span class="checkmark"></span>
+                        显示格式筛选功能
+                    </label>
+                    <p class="setting-desc">在预览面板中显示格式筛选下拉菜单</p>
+                </div>
+            </div>
+            
+            <div class="settings-section">
                 <h3>下载限制</h3>
                 <div class="setting-item">
                     <label for="max-files">最大文件数：</label>
@@ -97,11 +158,151 @@
                     <label for="file-size-limit">单文件大小限制(MB)：</label>
                     <input type="number" id="file-size-limit" value="100" min="1" max="1000">
                 </div>
+                <div class="setting-item">
+                    <label for="download-delay">脚本下载间隔(秒)：</label>
+                    <input type="number" id="download-delay" value="0.5" min="0.1" max="10" step="0.1">
+                    <p class="setting-desc">生成的脚本中文件下载之间的等待时间</p>
+                </div>
             </div>
             
             <div class="settings-actions">
                 <button id="save-settings" class="action-btn primary">保存设置</button>
                 <button id="reset-settings" class="action-btn secondary">重置</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="platforms-tab" style="display: none;">
+            <div class="platforms-section">
+                <div class="platforms-header">
+                    <h2>🌐 平台拓展</h2>
+                    <p class="platforms-desc">支持多平台的批量下载功能</p>
+                </div>
+                
+                <div class="platform-cards">
+                    <div class="platform-card xiaohongshu">
+                        <div class="platform-icon">📱</div>
+                        <div class="platform-info">
+                            <h3>小红书</h3>
+                            <p class="platform-status">✅ 已支持</p>
+                            <p class="platform-description">支持下载小红书的图片、视频内容</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag">图片下载</div>
+                            <div class="feature-tag">视频下载</div>
+                            <div class="feature-tag">批量处理</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn" onclick="window.open('https://www.xiaohongshu.com', '_blank')">
+                                🔗 访问平台
+                            </button>
+                            <button class="platform-btn secondary" onclick="alert('请在小红书页面使用扩展功能')">
+                                📖 使用说明
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">🎵</div>
+                        <div class="platform-info">
+                            <h3>抖音</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">即将支持抖音视频和音频下载</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">音频提取</div>
+                            <div class="feature-tag disabled">批量处理</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 敬请期待
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">📺</div>
+                        <div class="platform-info">
+                            <h3>B站</h3>
+                            <p class="platform-status">📋 计划中</p>
+                            <p class="platform-description">计划支持B站视频和弹幕下载</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">弹幕下载</div>
+                            <div class="feature-tag disabled">封面下载</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                📅 规划中
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="platforms-note">
+                    <h3>💡 使用提示</h3>
+                    <ul>
+                        <li>在支持的平台页面使用扩展功能</li>
+                        <li>部分平台可能需要登录才能正常使用</li>
+                        <li>请遵守各平台的使用条款和版权规定</li>
+                        <li>建议仅下载自己创作或有权使用的内容</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="about-tab" style="display: none;">
+            <div class="about-section">
+                <div class="about-header">
+                    <img src="../../assets/icons/icon48.png" alt="logo" class="about-logo">
+                    <h2>Web批量下载助手</h2>
+                    <p class="version">版本 1.0.0</p>
+                </div>
+                
+                <div class="about-content">
+                    <div class="feature-list">
+                        <h3>✨ 主要功能</h3>
+                        <ul>
+                            <li>🌐 整页下载 - 一键下载页面所有媒体文件</li>
+                            <li>🔲 区域选择 - 精确选择特定区域下载</li>
+                            <li>🔍 智能筛选 - 多级筛选系统，快速定位文件</li>
+                            <li>🎵 音频支持 - 全面支持MP3、WAV、FLAC等音频格式</li>
+                            <li>📊 智能排序 - 按时间、大小、名称、类型排序</li>
+                            <li>🔄 网络监听 - 实时捕获动态加载的媒体文件</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="tech-info">
+                        <h3>🔧 技术特性</h3>
+                        <ul>
+                            <li>基于 Manifest V3 的现代化扩展</li>
+                            <li>支持页面扫描和网络监听双重获取</li>
+                            <li>智能文件去重和大小估算</li>
+                            <li>响应式设计，适配不同屏幕</li>
+                            <li>本地处理，保护用户隐私</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="copyright-info">
+                        <h3>📄 版权信息</h3>
+                        <p><strong>版权所有</strong> © 2024 WebDownUtils 团队</p>
+                        <p><strong>开源许可</strong> Apache License 2.0</p>
+                        <p><strong>官方网站</strong> webdownutils.haoapk.cn</p>
+                        <p><strong>联系邮箱</strong> haoziu@163.com</p>
+                        <div class="links">
+                            <a href="https://webdownutils.haoapk.cn" target="_blank" class="link-btn">
+                                🏠 访问官网
+                            </a>
+                            <a href="mailto:haoziu@163.com" class="link-btn">
+                                📧 发送邮件
+                            </a>
+                            <a href="https://github.com/ZHFlys/WebDownUtils" target="_blank" class="link-btn">
+                                💻 GitHub
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
