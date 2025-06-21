@@ -9,11 +9,13 @@ class ContentScanner {
         this.previewPanel = null;
         this.foundFiles = [];
         this.selectedFiles = [];
-        this.currentFilter = 'all';
+        this.currentSourceFilter = 'all'; // 一级过滤：来源
+        this.currentTypeFilter = 'all';   // 二级过滤：类型
         this.isDragging = false;
         this.isResizing = false;
         this.dragStartX = 0;
         this.dragStartY = 0;
+        this.networkRefreshInterval = null;
         this.init();
     }
     
@@ -78,7 +80,8 @@ class ContentScanner {
     scanImages() {
         const images = [];
         const imgElements = document.querySelectorAll('img');
-        
+        const currentTime = new Date();
+
         imgElements.forEach((img, index) => {
             const src = img.src || img.dataset.src || img.dataset.original;
             if (src && this.isValidUrl(src)) {
@@ -88,7 +91,9 @@ class ContentScanner {
                     name: this.extractFilename(src) || `image_${index}`,
                     element: img,
                     alt: img.alt || '',
-                    size: this.getEstimatedSize(img)
+                    size: this.getEstimatedSize(img),
+                    timestamp: currentTime.getTime(),
+                    timeString: this.formatTime(currentTime)
                 });
             }
         });
@@ -106,7 +111,9 @@ class ContentScanner {
                         url: match[1],
                         name: this.extractFilename(match[1]) || `bg_image_${index}`,
                         element: el,
-                        size: null
+                        size: null,
+                        timestamp: currentTime.getTime(),
+                        timeString: this.formatTime(currentTime)
                     });
                 }
             }
@@ -117,6 +124,7 @@ class ContentScanner {
     
     scanVideos() {
         const videos = [];
+        const currentTime = new Date();
         
         // HTML5 视频
         const videoElements = document.querySelectorAll('video');
@@ -128,7 +136,9 @@ class ContentScanner {
                     url: src,
                     name: this.extractFilename(src) || `video_${index}`,
                     element: video,
-                    size: this.getEstimatedSize(video)
+                    size: this.getEstimatedSize(video),
+                    timestamp: currentTime.getTime(),
+                    timeString: this.formatTime(currentTime)
                 });
             }
             
@@ -141,24 +151,27 @@ class ContentScanner {
                         url: source.src,
                         name: this.extractFilename(source.src) || `video_${index}_${sourceIndex}`,
                         element: video,
-                        size: this.getEstimatedSize(video)
+                        size: this.getEstimatedSize(video),
+                        timestamp: currentTime.getTime(),
+                        timeString: this.formatTime(currentTime)
                     });
                 }
             });
         });
-        
+
         return videos;
     }
     
     scanDocuments() {
         const documents = [];
         const links = document.querySelectorAll('a[href]');
+        const currentTime = new Date();
         
         const docExtensions = [
             'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 
             'txt', 'rtf', 'zip', 'rar', '7z', 'tar', 'gz'
         ];
-        
+
         links.forEach((link, index) => {
             const href = link.href;
             if (href && this.isValidUrl(href)) {
@@ -170,12 +183,14 @@ class ContentScanner {
                         name: this.extractFilename(href) || `document_${index}`,
                         element: link,
                         text: link.textContent.trim(),
-                        size: null
+                        size: null,
+                        timestamp: currentTime.getTime(),
+                        timeString: this.formatTime(currentTime)
                     });
                 }
             }
         });
-        
+
         return documents;
     }
     
@@ -563,21 +578,17 @@ class ContentScanner {
         if (styles) {
             styles.remove();
         }
+        
+        // 清理定时器
+        this.cleanup();
     }
     
     createPreviewPanel() {
         // 创建主预览面板
         this.previewPanel = document.createElement('div');
         this.previewPanel.id = 'web-download-preview-panel';
-        this.previewPanel.className = 'collapsed';
         
         this.previewPanel.innerHTML = `
-            <div class="preview-toggle" id="preview-toggle">
-                <span class="toggle-icon">📋</span>
-                <span class="toggle-text">预览</span>
-                <span class="toggle-arrow">▶</span>
-            </div>
-            
             <div class="preview-content">
                 <div class="preview-header" id="preview-header">
                     <div class="preview-title">
@@ -591,15 +602,26 @@ class ContentScanner {
                 </div>
                 
                 <div class="preview-filters">
-                    <div class="filter-group">
-                        <button class="filter-btn active" data-filter="all">全部</button>
-                        <button class="filter-btn" data-filter="image">图片</button>
-                        <button class="filter-btn" data-filter="video">视频</button>
-                        <button class="filter-btn" data-filter="document">文档</button>
+                    <div class="filter-row primary-filters">
+                        <div class="filter-group">
+                            <button class="filter-btn primary active" data-filter="all">全部</button>
+                            <button class="filter-btn primary" data-filter="page">页面文件</button>
+                            <button class="filter-btn primary" data-filter="network">网络文件</button>
+                        </div>
                     </div>
-                    <div class="preview-actions">
+                    <div class="filter-row secondary-filters">
+                        <div class="filter-group">
+                            <button class="filter-btn secondary active" data-type="all">全部类型</button>
+                            <button class="filter-btn secondary" data-type="image">图片</button>
+                            <button class="filter-btn secondary" data-type="video">视频</button>
+                            <button class="filter-btn secondary" data-type="document">文档</button>
+                        </div>
+                    </div>
+                    <div class="action-row">
+                        <button class="action-btn-small" id="refresh-files-preview">🔄 重新获取</button>
                         <button class="action-btn-small" id="select-all-preview">全选</button>
                         <button class="action-btn-small" id="select-none-preview">全不选</button>
+                        <button class="action-btn-small danger" id="clear-all-files">🗑️ 清除全部</button>
                     </div>
                 </div>
                 
@@ -608,24 +630,24 @@ class ContentScanner {
                 </div>
                 
                 <div class="preview-footer">
-                    <button class="action-btn secondary" id="cancel-download-preview">取消</button>
+                    <button class="action-btn secondary" id="cancel-download-preview">关闭预览</button>
                     <button class="action-btn primary" id="confirm-download-preview">
                         <span class="btn-icon">⬇️</span>
                         开始下载 (<span id="download-count-preview">0</span>)
                     </button>
                 </div>
             </div>
-
         `;
         
         this.addPreviewStyles();
         document.body.appendChild(this.previewPanel);
         this.setupPreviewEvents();
         
-        // 延迟展开动画
-        setTimeout(() => {
-            this.previewPanel.classList.remove('collapsed');
-        }, 100);
+        // 自动启动网络监听
+        this.startNetworkMonitoring();
+        
+        // 设置定时刷新网络文件
+        this.setupNetworkFileRefresh();
     }
     
     addPreviewStyles() {
@@ -634,45 +656,6 @@ class ContentScanner {
         const styles = document.createElement('style');
         styles.id = 'web-download-preview-styles';
         styles.textContent = `
-                         .preview-toggle {
-                 position: absolute;
-                 left: -40px;
-                 top: 50%;
-                 transform: translateY(-50%);
-                 background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-                 color: white;
-                 padding: 12px 8px;
-                 border-radius: 8px 0 0 8px;
-                 cursor: pointer;
-                 writing-mode: vertical-lr;
-                 text-orientation: mixed;
-                 font-size: 12px;
-                 font-weight: 500;
-                 display: flex;
-                 flex-direction: column;
-                 align-items: center;
-                 gap: 4px;
-                 transition: all 0.3s ease;
-                 min-height: 100px;
-                 justify-content: center;
-                 box-shadow: -2px 0 10px rgba(0, 0, 0, 0.15);
-                 z-index: 1;
-             }
-             
-             .preview-toggle:hover {
-                 left: -42px;
-                 box-shadow: -4px 0 15px rgba(0, 0, 0, 0.2);
-             }
-             
-             .toggle-arrow {
-                 font-size: 14px;
-                 transition: transform 0.3s ease;
-             }
-             
-             #web-download-preview-panel.collapsed .toggle-arrow {
-                 transform: scaleX(-1);
-             }
-
              #web-download-preview-panel {
                  position: fixed;
                  top: 10%;
@@ -692,10 +675,6 @@ class ContentScanner {
                  display: flex;
                  flex-direction: column;
                  resize: none;
-             }
-             
-             #web-download-preview-panel.collapsed {
-                 transform: translateX(100%);
              }
             
             .preview-content {
@@ -746,15 +725,42 @@ class ContentScanner {
             }
             
             .preview-filters {
-                padding: 16px 20px;
+                padding: 12px 20px;
                 background: white;
                 border-bottom: 1px solid #e2e8f0;
+                flex-shrink: 0;
+            }
+            
+            .filter-row {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                flex-shrink: 0;
+                margin-bottom: 8px;
                 flex-wrap: wrap;
                 gap: 8px;
+            }
+            
+            .filter-row:last-of-type {
+                margin-bottom: 0;
+            }
+            
+            .primary-filters {
+                border-bottom: 1px solid #f1f5f9;
+                padding-bottom: 8px;
+            }
+            
+            .secondary-filters {
+                padding-top: 4px;
+            }
+            
+            .action-row {
+                display: flex;
+                gap: 4px;
+                flex-wrap: wrap;
+                justify-content: flex-start;
+                margin-top: 8px;
+                padding-top: 8px;
+                border-top: 1px solid #f1f5f9;
             }
             
             .filter-group {
@@ -775,20 +781,34 @@ class ContentScanner {
                 white-space: nowrap;
             }
             
+            .filter-btn.primary {
+                font-weight: 600;
+                border-radius: 6px;
+            }
+            
+            .filter-btn.secondary {
+                font-size: 10px;
+                border-radius: 12px;
+                background: #f8fafc;
+            }
+            
             .filter-btn.active {
-                background: #4f46e5;
-                border-color: #4f46e5;
                 color: white;
+            }
+            
+            .filter-btn.primary.active {
+                background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+                border-color: #4f46e5;
+            }
+            
+            .filter-btn.secondary.active {
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                border-color: #10b981;
             }
             
             .filter-btn:hover:not(.active) {
                 background: #f1f5f9;
                 border-color: #94a3b8;
-            }
-            
-            .preview-actions {
-                display: flex;
-                gap: 4px;
             }
             
             .action-btn-small {
@@ -806,6 +826,39 @@ class ContentScanner {
             .action-btn-small:hover {
                 background: #f1f5f9;
                 border-color: #94a3b8;
+            }
+            
+            .action-btn-small:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            
+            #refresh-files-preview {
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                color: white;
+                border-color: #10b981;
+                font-weight: 500;
+            }
+            
+            #refresh-files-preview:hover:not(:disabled) {
+                background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                border-color: #059669;
+                transform: translateY(-1px);
+                box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+            }
+            
+            #clear-all-files {
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
+                border-color: #ef4444;
+                font-weight: 500;
+            }
+            
+            #clear-all-files:hover:not(:disabled) {
+                background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+                border-color: #dc2626;
+                transform: translateY(-1px);
+                box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
             }
             
             .file-list-preview {
@@ -834,7 +887,7 @@ class ContentScanner {
                 background: #94a3b8;
             }
             
-                         .file-item-preview {
+            .file-item-preview {
                  border: 1px solid #e2e8f0;
                  border-radius: 8px;
                  background: white;
@@ -973,6 +1026,50 @@ class ContentScanner {
                  color: #64748b;
              }
              
+             .file-source {
+                 font-size: 8px;
+                 padding: 1px 4px;
+                 border-radius: 2px;
+                 font-weight: 500;
+                 text-transform: uppercase;
+             }
+             
+             .file-source.page {
+                 background: #dbeafe;
+                 color: #1e40af;
+             }
+             
+             .file-source.network {
+                 background: #d1fae5;
+                 color: #065f46;
+             }
+             
+             .file-source.both {
+                 background: #fef3c7;
+                 color: #92400e;
+             }
+             
+             .file-source-info {
+                 display: flex;
+                 align-items: center;
+                 gap: 4px;
+                 flex-wrap: wrap;
+             }
+             
+             .file-source-badge {
+                 margin-top: 2px;
+             }
+             
+             .file-time {
+                 font-size: 8px;
+                 padding: 1px 4px;
+                 border-radius: 2px;
+                 font-weight: 500;
+                 background: #f1f5f9;
+                 color: #475569;
+                 margin-left: 4px;
+             }
+             
              /* 非图片文件列表样式 */
              .file-item-preview.list-item {
                  display: flex;
@@ -1003,7 +1100,7 @@ class ContentScanner {
                  object-fit: cover;
              }
             
-                         .file-checkbox-preview {
+            .file-checkbox-preview {
                  flex-shrink: 0;
              }
             
@@ -1089,7 +1186,7 @@ class ContentScanner {
                 white-space: nowrap;
             }
             
-                         .file-actions-preview {
+            .file-actions-preview {
                  display: flex;
                  flex-direction: column;
                  align-items: flex-end;
@@ -1173,7 +1270,7 @@ class ContentScanner {
                 margin-right: 4px;
             }
             
-                         .file-list-preview.empty {
+            .file-list-preview.empty {
                  display: flex;
                  align-items: center;
                  justify-content: center;
@@ -1181,15 +1278,48 @@ class ContentScanner {
                  font-size: 12px;
              }
              
-
-            
-                         @media (max-width: 768px) {
+            @media (max-width: 768px) {
                  #web-download-preview-panel {
                      width: 350px;
                  }
                  
-                 #web-download-preview-panel.collapsed {
-                     transform: translateY(-50%) translateX(310px);
+                 .filter-row {
+                     flex-direction: column;
+                     align-items: flex-start;
+                     gap: 8px;
+                 }
+                 
+                 .primary-filters {
+                     border-bottom: none;
+                     padding-bottom: 4px;
+                 }
+                 
+                 .secondary-filters {
+                     padding-top: 0;
+                 }
+                 
+                 .filter-group {
+                     width: 100%;
+                     justify-content: center;
+                 }
+                 
+                 .filter-btn {
+                     font-size: 9px;
+                     padding: 3px 6px;
+                 }
+                 
+                 .filter-btn.secondary {
+                     font-size: 8px;
+                     padding: 2px 4px;
+                 }
+                 
+                 .action-row {
+                     justify-content: center;
+                 }
+                 
+                 .action-btn-small {
+                     font-size: 9px;
+                     padding: 3px 6px;
                  }
                  
                  .file-thumbnail {
@@ -1207,12 +1337,6 @@ class ContentScanner {
     }
     
     setupPreviewEvents() {
-        // 切换收缩/展开
-        const toggle = this.previewPanel.querySelector('#preview-toggle');
-        toggle.addEventListener('click', () => {
-            this.previewPanel.classList.toggle('collapsed');
-        });
-        
         // 拖拽功能
         const header = this.previewPanel.querySelector('#preview-header');
         header.addEventListener('mousedown', (e) => {
@@ -1220,8 +1344,6 @@ class ContentScanner {
                 this.startDragging(e);
             }
         });
-        
-
         
         // 全局鼠标事件
         document.addEventListener('mousemove', (e) => {
@@ -1234,12 +1356,16 @@ class ContentScanner {
             this.stopDragging();
         });
         
-
-        
         // 过滤按钮
-        this.previewPanel.querySelectorAll('.filter-btn').forEach(btn => {
+        this.previewPanel.querySelectorAll('.filter-btn.primary').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.switchPreviewFilter(e.target.dataset.filter);
+                this.switchSourceFilter(e.target.dataset.filter);
+            });
+        });
+        
+        this.previewPanel.querySelectorAll('.filter-btn.secondary').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchTypeFilter(e.target.dataset.type);
             });
         });
         
@@ -1250,6 +1376,16 @@ class ContentScanner {
         
         this.previewPanel.querySelector('#select-none-preview').addEventListener('click', () => {
             this.selectNoPreviewFiles();
+        });
+        
+        // 重新获取文件
+        this.previewPanel.querySelector('#refresh-files-preview').addEventListener('click', () => {
+            this.refreshFiles();
+        });
+        
+        // 清除全部文件
+        this.previewPanel.querySelector('#clear-all-files').addEventListener('click', () => {
+            this.clearAllFiles();
         });
         
         // 取消和确认按钮
@@ -1338,10 +1474,6 @@ class ContentScanner {
         }
     }
     
-
-    
-
-    
     updatePreviewContent() {
         this.updatePreviewStats();
         this.renderPreviewFileList();
@@ -1403,10 +1535,24 @@ class ContentScanner {
     }
     
     getFilteredPreviewFiles() {
-        if (this.currentFilter === 'all') {
-            return this.foundFiles;
+        let files = this.foundFiles;
+        
+        // 第一级过滤：按来源
+        if (this.currentSourceFilter && this.currentSourceFilter !== 'all') {
+            if (this.currentSourceFilter === 'page') {
+                files = files.filter(file => file.source === 'page' || file.source === 'both');
+            } else if (this.currentSourceFilter === 'network') {
+                files = files.filter(file => file.source === 'network' || file.source === 'both');
+            }
         }
-        return this.foundFiles.filter(file => file.type === this.currentFilter);
+        
+        // 第二级过滤：按文件类型
+        if (this.currentTypeFilter && this.currentTypeFilter !== 'all') {
+            files = files.filter(file => file.type === this.currentTypeFilter);
+        }
+        
+        // 按时间排序，新的在前面
+        return files.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
     
     createPreviewFileItem(file, index, isImage = false) {
@@ -1425,7 +1571,11 @@ class ContentScanner {
                     <div class="image-name" title="${file.name || '未命名'}">${this.truncateText(file.name || '未命名', 12)}</div>
                     <div class="image-url" title="${file.url}">${this.truncateUrl(file.url)}</div>
                     <div class="image-actions">
-                        <span class="file-size">${this.formatPreviewFileSize(file.size)}</span>
+                        <div class="file-source-info">
+                            <span class="file-source ${file.source || 'page'}">${this.getSourceText(file.source)}</span>
+                            <span class="file-time">📅 ${file.timeString || '--:--'}</span>
+                            <span class="file-size">${this.formatPreviewFileSize(file.size)}</span>
+                        </div>
                         <div class="image-action-buttons">
                             <div class="image-checkbox">
                                 <input type="checkbox" ${isSelected ? 'checked' : ''} data-url="${file.url}">
@@ -1450,6 +1600,10 @@ class ContentScanner {
                     <div class="file-details-preview">
                         <div class="file-name-preview" title="${file.name || '未命名'}">${this.truncateText(file.name || '未命名', 20)}</div>
                         <div class="file-url-preview" title="${file.url}">${this.truncateUrl(file.url)}</div>
+                        <div class="file-source-badge">
+                            <span class="file-source ${file.source || 'page'}">${this.getSourceText(file.source)}</span>
+                            <span class="file-time">📅 ${file.timeString || '--:--'}</span>
+                        </div>
                     </div>
                     <div class="file-actions-preview">
                         <div class="file-size-preview">${this.formatPreviewFileSize(file.size)}</div>
@@ -1525,12 +1679,29 @@ class ContentScanner {
         }
     }
     
-    switchPreviewFilter(filter) {
-        this.currentFilter = filter;
+    formatTime(date) {
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+    
+    switchSourceFilter(filter) {
+        this.currentSourceFilter = filter;
         
         // 更新按钮状态
-        this.previewPanel.querySelectorAll('.filter-btn').forEach(btn => {
+        this.previewPanel.querySelectorAll('.filter-btn.primary').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.filter === filter);
+        });
+        
+        this.renderPreviewFileList();
+    }
+    
+    switchTypeFilter(type) {
+        this.currentTypeFilter = type;
+        
+        // 更新按钮状态
+        this.previewPanel.querySelectorAll('.filter-btn.secondary').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.type === type);
         });
         
         this.renderPreviewFileList();
@@ -1547,14 +1718,120 @@ class ContentScanner {
     }
     
     selectNoPreviewFiles() {
-        const filteredFiles = this.getFilteredPreviewFiles();
-        filteredFiles.forEach(file => {
-            const fileIndex = this.selectedFiles.findIndex(f => f.url === file.url);
-            if (fileIndex > -1) {
-                this.selectedFiles.splice(fileIndex, 1);
+        this.selectedFiles = [];
+        
+        // 更新所有复选框状态
+        this.previewPanel.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        this.updatePreviewStats();
+    }
+    
+    async refreshFiles() {
+        const refreshBtn = this.previewPanel.querySelector('#refresh-files-preview');
+        const originalText = refreshBtn.textContent;
+        
+        // 显示加载状态
+        refreshBtn.textContent = '🔄 获取中...';
+        refreshBtn.disabled = true;
+        refreshBtn.style.opacity = '0.6';
+        
+        try {
+            // 获取当前设置
+            const settings = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
+            });
+            
+            // 同时获取页面文件和网络文件
+            const [pageResult, networkFiles] = await Promise.all([
+                this.scanPage(settings),
+                new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ action: 'getNetworkFiles' }, resolve);
+                })
+            ]);
+            
+            // 从scanPage结果中提取文件数组
+            const pageFiles = pageResult && pageResult.files ? pageResult.files : [];
+            
+
+            
+            // 合并文件列表，去重
+            const allFiles = this.mergeFiles(pageFiles, networkFiles || []);
+            
+            if (allFiles && allFiles.length > 0) {
+                // 更新文件列表
+                this.foundFiles = allFiles;
+                
+                // 保持之前选中的文件（如果仍然存在）
+                const previousSelectedUrls = this.selectedFiles.map(f => f.url);
+                this.selectedFiles = this.foundFiles.filter(f => previousSelectedUrls.includes(f.url));
+                
+                // 更新预览内容
+                this.updatePreviewContent();
+                
+                // 显示成功提示
+                const pageCount = Array.isArray(pageFiles) ? pageFiles.length : 0;
+                const networkCount = Array.isArray(networkFiles) ? networkFiles.length : 0;
+                refreshBtn.textContent = `✅ 已更新 (页面:${pageCount} 网络:${networkCount})`;
+                setTimeout(() => {
+                    refreshBtn.textContent = originalText;
+                }, 2000);
+            } else {
+                // 没有找到文件
+                refreshBtn.textContent = '❌ 无文件';
+                setTimeout(() => {
+                    refreshBtn.textContent = originalText;
+                }, 1500);
+            }
+        } catch (error) {
+            console.error('重新获取文件失败:', error);
+            refreshBtn.textContent = '❌ 失败';
+            setTimeout(() => {
+                refreshBtn.textContent = originalText;
+            }, 1500);
+        } finally {
+            // 恢复按钮状态
+            setTimeout(() => {
+                refreshBtn.disabled = false;
+                refreshBtn.style.opacity = '1';
+            }, 2000);
+        }
+    }
+    
+    mergeFiles(pageFiles, networkFiles) {
+        const fileMap = new Map();
+        
+        // 确保参数是数组
+        const safePageFiles = Array.isArray(pageFiles) ? pageFiles : [];
+        const safeNetworkFiles = Array.isArray(networkFiles) ? networkFiles : [];
+        
+        // 添加页面文件
+        safePageFiles.forEach(file => {
+            file.source = 'page';
+            fileMap.set(file.url, file);
+        });
+        
+        // 添加网络文件，如果URL已存在则合并信息
+        safeNetworkFiles.forEach(file => {
+            if (fileMap.has(file.url)) {
+                // 合并信息，优先使用网络文件的大小信息
+                const existingFile = fileMap.get(file.url);
+                existingFile.source = 'both';
+                if (file.size && !existingFile.size) {
+                    existingFile.size = file.size;
+                }
+                if (file.mimeType) {
+                    existingFile.mimeType = file.mimeType;
+                }
+            } else {
+                // 新的网络文件
+                file.source = 'network';
+                fileMap.set(file.url, file);
             }
         });
-        this.updatePreviewContent();
+        
+        return Array.from(fileMap.values());
     }
     
     startDownloadFromPreview() {
@@ -1768,6 +2045,90 @@ class ContentScanner {
         });
         
         document.body.appendChild(modal);
+    }
+    
+    getSourceText(source) {
+        switch (source) {
+            case 'page': return '页面文件';
+            case 'network': return '网络文件';
+            case 'both': return '页面和网络文件';
+            default: return '未知来源';
+        }
+    }
+    
+    clearAllFiles() {
+        // 显示确认对话框
+        if (confirm('确定要清除所有文件吗？此操作不可撤销。')) {
+            // 清空所有文件列表
+            this.foundFiles = [];
+            this.selectedFiles = [];
+            
+            // 重新启动网络监听（这会清除之前的网络文件数据）
+            chrome.runtime.sendMessage({ action: 'startNetworkMonitoring' }, () => {
+                console.log('已重新启动网络监听，清除旧数据');
+            });
+            
+            // 更新预览内容
+            this.updatePreviewContent();
+            
+            // 显示清除成功的提示
+            const clearBtn = this.previewPanel.querySelector('#clear-all-files');
+            const originalText = clearBtn.textContent;
+            clearBtn.textContent = '✅ 已清除';
+            setTimeout(() => {
+                clearBtn.textContent = originalText;
+            }, 1500);
+        }
+    }
+    
+    startNetworkMonitoring() {
+        // 启动网络监听
+        chrome.runtime.sendMessage({ action: 'startNetworkMonitoring' }, (response) => {
+            if (response && response.success) {
+                console.log('网络监听已自动启动');
+            }
+        });
+    }
+    
+    setupNetworkFileRefresh() {
+        // 设置定时器，每3秒刷新一次网络文件
+        this.networkRefreshInterval = setInterval(() => {
+            this.refreshNetworkFiles();
+        }, 3000);
+    }
+    
+    async refreshNetworkFiles() {
+        try {
+            // 获取最新的网络文件
+            const networkFiles = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({ action: 'getNetworkFiles' }, resolve);
+            });
+            
+            if (networkFiles && networkFiles.length > 0) {
+                // 合并现有页面文件和新的网络文件
+                const pageFiles = this.foundFiles.filter(file => file.source === 'page' || file.source === 'both');
+                const allFiles = this.mergeFiles(pageFiles, networkFiles);
+                
+                // 检查是否有新文件
+                const oldCount = this.foundFiles.length;
+                this.foundFiles = allFiles;
+                
+                // 如果文件数量有变化，更新显示
+                if (allFiles.length !== oldCount) {
+                    this.updatePreviewContent();
+                }
+            }
+        } catch (error) {
+            console.error('刷新网络文件失败:', error);
+        }
+    }
+    
+    // 清理定时器
+    cleanup() {
+        if (this.networkRefreshInterval) {
+            clearInterval(this.networkRefreshInterval);
+            this.networkRefreshInterval = null;
+        }
     }
 }
 

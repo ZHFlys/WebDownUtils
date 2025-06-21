@@ -3,6 +3,7 @@ class BackgroundService {
     constructor() {
         this.downloadQueue = new Map();
         this.activeDownloads = new Set();
+        this.networkFiles = new Map(); // 存储网络请求捕获的文件
         this.init();
     }
     
@@ -10,6 +11,7 @@ class BackgroundService {
         this.setupMessageListeners();
         this.setupContextMenus();
         this.setupDownloadListeners();
+        this.setupNetworkListeners();
     }
     
     setupMessageListeners() {
@@ -21,6 +23,20 @@ class BackgroundService {
                 case 'downloadFiles':
                     this.downloadFiles(request.files, request.settings).then(sendResponse);
                     return true;
+                case 'getSettings':
+                    this.getSettings().then(sendResponse);
+                    return true;
+                case 'getNetworkFiles':
+                    this.getNetworkFiles(sender.tab.id).then(sendResponse);
+                    return true;
+                case 'startNetworkMonitoring':
+                    this.startNetworkMonitoring(sender.tab.id);
+                    sendResponse({ success: true });
+                    break;
+                case 'stopNetworkMonitoring':
+                    this.stopNetworkMonitoring(sender.tab.id);
+                    sendResponse({ success: true });
+                    break;
             }
         });
     }
@@ -274,6 +290,191 @@ class BackgroundService {
     
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    
+    setupNetworkListeners() {
+        // 监听网络请求
+        chrome.webRequest.onBeforeRequest.addListener(
+            (details) => {
+                if (this.isMediaFile(details.url)) {
+                    this.addNetworkFile(details.tabId, details.url, details.type);
+                }
+            },
+            { urls: ["<all_urls>"] },
+            ["requestBody"]
+        );
+        
+        // 监听响应头，获取文件大小等信息
+        chrome.webRequest.onResponseStarted.addListener(
+            (details) => {
+                if (this.isMediaFile(details.url)) {
+                    this.updateNetworkFileInfo(details.tabId, details.url, details.responseHeaders);
+                }
+            },
+            { urls: ["<all_urls>"] },
+            ["responseHeaders"]
+        );
+        
+        // 清理标签页关闭时的数据
+        chrome.tabs.onRemoved.addListener((tabId) => {
+            this.networkFiles.delete(tabId);
+        });
+    }
+    
+    isMediaFile(url) {
+        try {
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname.toLowerCase();
+            
+            // 检查文件扩展名
+            const mediaExtensions = [
+                // 视频格式
+                '.mp4', '.webm', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.m4v', '.3gp',
+                // 音频格式
+                '.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma',
+                // 图片格式
+                '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tiff',
+                // 文档格式
+                '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar'
+            ];
+            
+            return mediaExtensions.some(ext => pathname.endsWith(ext));
+        } catch {
+            return false;
+        }
+    }
+    
+    addNetworkFile(tabId, url, requestType) {
+        if (!this.networkFiles.has(tabId)) {
+            this.networkFiles.set(tabId, new Map());
+        }
+        
+        const tabFiles = this.networkFiles.get(tabId);
+        
+        if (!tabFiles.has(url)) {
+            const currentTime = new Date();
+            const file = {
+                url: url,
+                name: this.extractFilename(url) || this.generateNameFromUrl(url),
+                type: this.getFileTypeFromUrl(url),
+                size: null,
+                timestamp: currentTime.getTime(),
+                timeString: this.formatTime(currentTime),
+                requestType: requestType
+            };
+            
+            tabFiles.set(url, file);
+        }
+    }
+    
+    updateNetworkFileInfo(tabId, url, responseHeaders) {
+        const tabFiles = this.networkFiles.get(tabId);
+        if (tabFiles && tabFiles.has(url)) {
+            const file = tabFiles.get(url);
+            
+            // 从响应头获取文件大小
+            const contentLength = responseHeaders.find(header => 
+                header.name.toLowerCase() === 'content-length'
+            );
+            if (contentLength) {
+                file.size = parseInt(contentLength.value);
+            }
+            
+            // 从响应头获取文件类型
+            const contentType = responseHeaders.find(header => 
+                header.name.toLowerCase() === 'content-type'
+            );
+            if (contentType) {
+                file.mimeType = contentType.value;
+                // 根据MIME类型更新文件类型
+                if (contentType.value.startsWith('video/')) {
+                    file.type = 'video';
+                } else if (contentType.value.startsWith('audio/')) {
+                    file.type = 'audio';
+                } else if (contentType.value.startsWith('image/')) {
+                    file.type = 'image';
+                }
+            }
+        }
+    }
+    
+    getFileTypeFromUrl(url) {
+        try {
+            const pathname = new URL(url).pathname.toLowerCase();
+            
+            if (pathname.includes('.mp4') || pathname.includes('.webm') || 
+                pathname.includes('.avi') || pathname.includes('.mov')) {
+                return 'video';
+            }
+            if (pathname.includes('.mp3') || pathname.includes('.wav') || 
+                pathname.includes('.flac') || pathname.includes('.aac')) {
+                return 'audio';
+            }
+            if (pathname.includes('.jpg') || pathname.includes('.png') || 
+                pathname.includes('.gif') || pathname.includes('.webp')) {
+                return 'image';
+            }
+            if (pathname.includes('.pdf') || pathname.includes('.doc') || 
+                pathname.includes('.zip')) {
+                return 'document';
+            }
+        } catch {}
+        
+        return 'unknown';
+    }
+    
+    generateNameFromUrl(url) {
+        try {
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname;
+            const segments = pathname.split('/').filter(s => s);
+            const lastSegment = segments[segments.length - 1];
+            
+            if (lastSegment && lastSegment.length > 0) {
+                return lastSegment;
+            }
+            
+            // 如果没有文件名，使用域名和时间戳
+            const hostname = urlObj.hostname;
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+            return `${hostname}_${timestamp}`;
+        } catch {
+            return `network_file_${Date.now()}`;
+        }
+    }
+    
+    formatTime(date) {
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+    
+    async getNetworkFiles(tabId) {
+        const tabFiles = this.networkFiles.get(tabId);
+        if (!tabFiles) {
+            return [];
+        }
+        
+        // 转换为数组并按时间排序（最新的在前）
+        const files = Array.from(tabFiles.values()).sort((a, b) => b.timestamp - a.timestamp);
+        
+        return files;
+    }
+    
+    startNetworkMonitoring(tabId) {
+        // 清空之前的记录
+        if (this.networkFiles.has(tabId)) {
+            this.networkFiles.get(tabId).clear();
+        } else {
+            this.networkFiles.set(tabId, new Map());
+        }
+        
+        console.log(`开始监听标签页 ${tabId} 的网络请求`);
+    }
+    
+    stopNetworkMonitoring(tabId) {
+        // 保留数据，只是停止新的监听
+        console.log(`停止监听标签页 ${tabId} 的网络请求`);
     }
 }
 

@@ -8,7 +8,8 @@
     "storage",
     "downloads",
     "scripting",
-    "contextMenus"
+    "contextMenus",
+    "webRequest"
   ],
   "host_permissions": [
     "https://*/*",

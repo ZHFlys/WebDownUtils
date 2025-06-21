@@ -148,6 +148,32 @@ body {
     font-weight: 500;
 }
 
+.network-info {
+    margin-bottom: 16px;
+}
+
+.info-tip {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.tip-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.tip-text {
+    font-size: 11px;
+    color: #15803d;
+    line-height: 1.4;
+}
+
 .download-options {
     background: #f8fafc;
     border-radius: 8px;
@@ -199,8 +225,6 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
 }
-
-
 
 .progress-section {
     background: #f0f9ff;
@@ -353,8 +377,6 @@ body {
     .tab-content {
         padding: 16px;
     }
-    
-
     
     .settings-actions {
         flex-direction: column;
