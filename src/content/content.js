@@ -601,6 +601,11 @@ class ContentScanner {
                     </div>
                 </div>
                 
+                <div class="network-monitor-tip">
+                    <span class="tip-icon">🔄</span>
+                    <span class="tip-text">持续监听网页文件中...</span>
+                </div>
+                
                 <div class="preview-filters">
                     <div class="filter-row primary-filters">
                         <div class="filter-group">
@@ -722,6 +727,32 @@ class ContentScanner {
             .preview-stats {
                 font-size: 12px;
                 color: rgba(255, 255, 255, 0.9);
+            }
+            
+            .network-monitor-tip {
+                padding: 8px 20px;
+                background: linear-gradient(90deg, #f0f9ff, #e0f2fe);
+                border-bottom: 1px solid #e2e8f0;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                color: #0369a1;
+                flex-shrink: 0;
+            }
+            
+            .network-monitor-tip .tip-icon {
+                font-size: 12px;
+                animation: spin 2s linear infinite;
+            }
+            
+            .network-monitor-tip .tip-text {
+                font-weight: 500;
+            }
+            
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
             }
             
             .preview-filters {
@@ -1404,14 +1435,20 @@ class ContentScanner {
                 return;
             }
             
-            // 处理图片预览
+            // 处理预览（图片和视频）
             if (e.target.closest('.image-thumbnail[data-preview-url]') || e.target.closest('.preview-btn[data-preview-url]')) {
                 e.preventDefault();
                 e.stopPropagation();
                 const element = e.target.closest('[data-preview-url]');
-                const imageUrl = element.dataset.previewUrl;
-                if (imageUrl) {
-                    this.showImagePreview(imageUrl);
+                const previewUrl = element.dataset.previewUrl;
+                const previewType = element.dataset.previewType;
+                
+                if (previewUrl) {
+                    if (previewType === 'video') {
+                        this.showVideoPreview(previewUrl);
+                    } else {
+                        this.showImagePreview(previewUrl);
+                    }
                 }
                 return;
             }
@@ -1607,6 +1644,7 @@ class ContentScanner {
                     </div>
                     <div class="file-actions-preview">
                         <div class="file-size-preview">${this.formatPreviewFileSize(file.size)}</div>
+                        ${file.type === 'video' ? `<button class="preview-btn" data-preview-url="${file.url}" data-preview-type="video" title="预览视频">👁️</button>` : ''}
                         <button class="copy-link-btn" data-copy-url="${file.url}" title="复制链接">📋</button>
                     </div>
                 </div>
@@ -2039,6 +2077,190 @@ class ContentScanner {
             
             // 新标签页打开
             if (e.target.classList.contains('open-image-tab')) {
+                const url = e.target.dataset.url;
+                window.open(url, '_blank');
+            }
+        });
+        
+        document.body.appendChild(modal);
+    }
+    
+    showVideoPreview(videoUrl) {
+        // 移除现有的预览
+        const existingPreview = document.getElementById('video-preview-modal');
+        if (existingPreview) {
+            document.body.removeChild(existingPreview);
+        }
+        
+        // 创建视频预览模态框
+        const modal = document.createElement('div');
+        modal.id = 'video-preview-modal';
+        modal.innerHTML = `
+            <div class="video-preview-backdrop"></div>
+            <div class="video-preview-container">
+                <div class="video-preview-header">
+                    <span class="video-preview-title">视频预览</span>
+                    <button class="video-preview-close">✕</button>
+                </div>
+                <div class="video-preview-content">
+                    <video src="${videoUrl}" controls preload="metadata" onerror="this.parentElement.innerHTML='<div style=&quot;color:#64748b;font-size:14px;text-align:center;padding:40px;&quot;>视频加载失败</div>'">
+                        您的浏览器不支持视频播放。
+                    </video>
+                </div>
+                <div class="video-preview-footer">
+                    <button class="video-action-btn copy-video-link" data-url="${videoUrl}">复制链接</button>
+                    <button class="video-action-btn open-video-tab" data-url="${videoUrl}">新标签页打开</button>
+                </div>
+            </div>
+        `;
+            
+        // 添加样式
+        if (!document.getElementById('video-preview-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'video-preview-styles';
+            styles.textContent = `
+                #video-preview-modal {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    z-index: 9999999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    animation: fadeIn 0.3s ease;
+                }
+                
+                .video-preview-backdrop {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    backdrop-filter: blur(4px);
+                    cursor: pointer;
+                }
+                
+                .video-preview-container {
+                    position: relative;
+                    max-width: 90vw;
+                    max-height: 90vh;
+                    background: white;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                    display: flex;
+                    flex-direction: column;
+                    animation: slideIn 0.3s ease;
+                }
+                
+                .video-preview-header {
+                    padding: 16px 20px;
+                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+                    color: white;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                
+                .video-preview-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                }
+                
+                .video-preview-close {
+                    width: 32px;
+                    height: 32px;
+                    border: none;
+                    background: rgba(255, 255, 255, 0.2);
+                    color: white;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 16px;
+                    transition: all 0.3s ease;
+                }
+                
+                .video-preview-close:hover {
+                    background: rgba(255, 255, 255, 0.3);
+                    transform: scale(1.05);
+                }
+                
+                .video-preview-content {
+                    padding: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex: 1;
+                    min-height: 300px;
+                    background: #000;
+                }
+                
+                .video-preview-content video {
+                    max-width: 100%;
+                    max-height: 70vh;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                }
+                
+                .video-preview-footer {
+                    padding: 16px 20px;
+                    background: #f8fafc;
+                    display: flex;
+                    gap: 12px;
+                    justify-content: center;
+                    border-top: 1px solid #e2e8f0;
+                }
+                
+                .video-action-btn {
+                    padding: 8px 16px;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+                    color: white;
+                }
+                
+                .video-action-btn:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        // 添加事件监听器
+        modal.addEventListener('click', (e) => {
+            // 点击背景关闭
+            if (e.target.classList.contains('video-preview-backdrop')) {
+                modal.remove();
+            }
+            
+            // 关闭按钮
+            if (e.target.classList.contains('video-preview-close')) {
+                modal.remove();
+            }
+            
+            // 复制链接
+            if (e.target.classList.contains('copy-video-link')) {
+                const url = e.target.dataset.url;
+                navigator.clipboard.writeText(url).then(() => {
+                    e.target.textContent = '✅ 已复制';
+                    setTimeout(() => {
+                        e.target.textContent = '复制链接';
+                    }, 1000);
+                });
+            }
+            
+            // 新标签页打开
+            if (e.target.classList.contains('open-video-tab')) {
                 const url = e.target.dataset.url;
                 window.open(url, '_blank');
             }
