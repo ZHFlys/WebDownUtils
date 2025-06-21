@@ -11,6 +11,13 @@ class ContentScanner {
         this.selectedFiles = [];
         this.currentSourceFilter = 'all'; // 一级过滤：来源
         this.currentTypeFilter = 'all';   // 二级过滤：类型
+        this.currentSizeFilter = 'all';   // 三级过滤：大小
+        this.customSizeRange = {          // 自定义大小范围
+            min: 0,
+            max: null,
+            minUnit: 'MB',
+            maxUnit: 'MB'
+        };
         this.isDragging = false;
         this.isResizing = false;
         this.dragStartX = 0;
@@ -609,8 +616,27 @@ class ContentScanner {
             const height = element.naturalHeight || element.height || 0;
             
             if (width && height) {
-                // 粗略估算图片大小 (假设每像素3字节)
-                return width * height * 3;
+                // 改进的图片大小估算
+                // 根据图片格式和尺寸进行更准确的估算
+                const pixels = width * height;
+                const src = element.src || '';
+                
+                if (src.toLowerCase().includes('.jpg') || src.toLowerCase().includes('.jpeg')) {
+                    // JPEG压缩率较高，平均每像素0.5字节
+                    return Math.round(pixels * 0.5);
+                } else if (src.toLowerCase().includes('.png')) {
+                    // PNG无损压缩，平均每像素2字节
+                    return Math.round(pixels * 2);
+                } else if (src.toLowerCase().includes('.gif')) {
+                    // GIF有限颜色，平均每像素1字节
+                    return Math.round(pixels * 1);
+                } else if (src.toLowerCase().includes('.webp')) {
+                    // WebP高效压缩，平均每像素0.3字节
+                    return Math.round(pixels * 0.3);
+                } else {
+                    // 默认估算
+                    return Math.round(pixels * 1);
+                }
             }
         } else if (element.tagName === 'VIDEO') {
             const duration = element.duration || 0;
@@ -618,12 +644,75 @@ class ContentScanner {
             const height = element.videoHeight || element.height || 0;
             
             if (duration && width && height) {
-                // 粗略估算视频大小 (假设中等质量)
-                return duration * width * height * 0.1;
+                // 改进的视频大小估算
+                const pixels = width * height;
+                const fps = 30; // 假设30帧每秒
+                const totalFrames = duration * fps;
+                
+                // 根据分辨率调整压缩率
+                let bytesPerPixel;
+                if (width >= 1920) {
+                    // 高清视频，压缩率较高
+                    bytesPerPixel = 0.05;
+                } else if (width >= 1280) {
+                    // 中等分辨率
+                    bytesPerPixel = 0.08;
+                } else {
+                    // 低分辨率
+                    bytesPerPixel = 0.1;
+                }
+                
+                return Math.round(totalFrames * pixels * bytesPerPixel);
             }
         }
         
         return null;
+    }
+    
+    estimateFileSizeByType(file) {
+        // 根据文件类型和URL特征估算文件大小
+        const url = file.url || '';
+        const type = file.type || 'unknown';
+        
+        switch (type) {
+            case 'image':
+                // 根据URL中的图片格式估算
+                if (url.toLowerCase().includes('.jpg') || url.toLowerCase().includes('.jpeg')) {
+                    return 200 * 1024; // 200KB
+                } else if (url.toLowerCase().includes('.png')) {
+                    return 500 * 1024; // 500KB
+                } else if (url.toLowerCase().includes('.gif')) {
+                    return 1024 * 1024; // 1MB
+                } else if (url.toLowerCase().includes('.webp')) {
+                    return 150 * 1024; // 150KB
+                } else {
+                    return 300 * 1024; // 默认300KB
+                }
+                
+            case 'video':
+                // 视频文件通常较大
+                if (url.toLowerCase().includes('.mp4')) {
+                    return 10 * 1024 * 1024; // 10MB
+                } else if (url.toLowerCase().includes('.webm')) {
+                    return 5 * 1024 * 1024; // 5MB
+                } else {
+                    return 8 * 1024 * 1024; // 默认8MB
+                }
+                
+            case 'document':
+                if (url.toLowerCase().includes('.pdf')) {
+                    return 2 * 1024 * 1024; // 2MB
+                } else if (url.toLowerCase().includes('.doc') || url.toLowerCase().includes('.docx')) {
+                    return 1024 * 1024; // 1MB
+                } else if (url.toLowerCase().includes('.zip') || url.toLowerCase().includes('.rar')) {
+                    return 5 * 1024 * 1024; // 5MB
+                } else {
+                    return 500 * 1024; // 默认500KB
+                }
+                
+            default:
+                return 1024 * 1024; // 默认1MB
+        }
     }
     
     showPreviewPanel(files, selectedFiles) {
@@ -691,6 +780,39 @@ class ContentScanner {
                             <button class="filter-btn secondary" data-type="image">图片</button>
                             <button class="filter-btn secondary" data-type="video">视频</button>
                             <button class="filter-btn secondary" data-type="document">文档</button>
+                        </div>
+                    </div>
+                    <div class="filter-row size-filters">
+                        <div class="filter-group">
+                            <button class="filter-btn size active" data-size="all">全部大小</button>
+                            <button class="filter-btn size" data-size="small">小文件(&lt;1MB)</button>
+                            <button class="filter-btn size" data-size="medium">中文件(1-10MB)</button>
+                            <button class="filter-btn size" data-size="large">大文件(&gt;10MB)</button>
+                            <button class="filter-btn size" data-size="custom">自定义范围</button>
+                        </div>
+                    </div>
+                    <div class="filter-row size-range-row" id="size-range-row" style="display: none;">
+                        <div class="size-range-container">
+                            <div class="range-input-group">
+                                <label>最小:</label>
+                                <input type="number" id="min-size-input" min="0" step="0.1" placeholder="0">
+                                <select id="min-size-unit">
+                                    <option value="KB">KB</option>
+                                    <option value="MB" selected>MB</option>
+                                    <option value="GB">GB</option>
+                                </select>
+                            </div>
+                            <div class="range-separator">-</div>
+                            <div class="range-input-group">
+                                <label>最大:</label>
+                                <input type="number" id="max-size-input" min="0" step="0.1" placeholder="无限制">
+                                <select id="max-size-unit">
+                                    <option value="KB">KB</option>
+                                    <option value="MB" selected>MB</option>
+                                    <option value="GB">GB</option>
+                                </select>
+                            </div>
+                            <button class="apply-range-btn" id="apply-size-range">应用</button>
                         </div>
                     </div>
                     <div class="action-row">
@@ -855,6 +977,11 @@ class ContentScanner {
                 padding-top: 4px;
             }
             
+            .size-filters {
+                padding-top: 4px;
+                border-top: 1px solid #f1f5f9;
+            }
+            
             .action-row {
                 display: flex;
                 gap: 4px;
@@ -906,6 +1033,102 @@ class ContentScanner {
             .filter-btn.secondary.active {
                 background: linear-gradient(135deg, #10b981 0%, #059669 100%);
                 border-color: #10b981;
+            }
+            
+            .filter-btn.size {
+                font-size: 9px;
+                border-radius: 10px;
+                background: #fef3c7;
+                border-color: #f59e0b;
+                color: #92400e;
+            }
+            
+            .filter-btn.size.active {
+                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                border-color: #f59e0b;
+                color: white;
+            }
+            
+            .size-range-row {
+                padding: 8px 0 4px 0;
+                border-top: 1px solid #f1f5f9;
+            }
+            
+            .size-range-container {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .range-input-group {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 120px;
+            }
+            
+            .range-input-group label {
+                font-size: 10px;
+                color: #64748b;
+                font-weight: 500;
+                min-width: 30px;
+            }
+            
+            .range-input-group input {
+                width: 60px;
+                padding: 2px 4px;
+                border: 1px solid #d1d5db;
+                border-radius: 3px;
+                font-size: 10px;
+                text-align: center;
+            }
+            
+            .range-input-group input:focus {
+                outline: none;
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
+            }
+            
+            .range-input-group select {
+                padding: 2px 3px;
+                border: 1px solid #d1d5db;
+                border-radius: 3px;
+                font-size: 9px;
+                background: white;
+                cursor: pointer;
+            }
+            
+            .range-input-group select:focus {
+                outline: none;
+                border-color: #f59e0b;
+            }
+            
+            .range-separator {
+                font-size: 12px;
+                color: #64748b;
+                font-weight: bold;
+                margin: 0 4px;
+            }
+            
+            .apply-range-btn {
+                padding: 4px 8px;
+                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                min-width: 40px;
+            }
+            
+            .apply-range-btn:hover {
+                background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
             }
             
             .filter-btn:hover:not(.active) {
@@ -1415,6 +1638,11 @@ class ContentScanner {
                      padding: 2px 4px;
                  }
                  
+                 .filter-btn.size {
+                     font-size: 7px;
+                     padding: 2px 3px;
+                 }
+                 
                  .action-row {
                      justify-content: center;
                  }
@@ -1431,6 +1659,30 @@ class ContentScanner {
                  
                  .file-item-preview {
                      padding: 10px 12px;
+                 }
+                 
+                 .size-range-container {
+                     flex-direction: column;
+                     gap: 6px;
+                 }
+                 
+                 .range-input-group {
+                     min-width: 100px;
+                 }
+                 
+                 .range-input-group input {
+                     width: 50px;
+                     font-size: 9px;
+                 }
+                 
+                 .range-input-group select {
+                     font-size: 8px;
+                 }
+                 
+                 .apply-range-btn {
+                     font-size: 9px;
+                     padding: 3px 6px;
+                     min-width: 35px;
                  }
              }
         `;
@@ -1471,6 +1723,12 @@ class ContentScanner {
             });
         });
         
+        this.previewPanel.querySelectorAll('.filter-btn.size').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchSizeFilter(e.target.dataset.size);
+            });
+        });
+        
         // 全选/全不选
         this.previewPanel.querySelector('#select-all-preview').addEventListener('click', () => {
             this.selectAllPreviewFiles();
@@ -1488,6 +1746,11 @@ class ContentScanner {
         // 清除全部文件
         this.previewPanel.querySelector('#clear-all-files').addEventListener('click', () => {
             this.clearAllFiles();
+        });
+        
+        // 自定义范围应用按钮
+        this.previewPanel.querySelector('#apply-size-range').addEventListener('click', () => {
+            this.applySizeRange();
         });
         
         // 取消和确认按钮
@@ -1659,6 +1922,44 @@ class ContentScanner {
             files = files.filter(file => file.type === this.currentTypeFilter);
         }
         
+        // 第三级过滤：按文件大小
+        if (this.currentSizeFilter && this.currentSizeFilter !== 'all') {
+            files = files.filter(file => {
+                let size = file.size || 0;
+                
+                // 对于没有大小信息的文件，根据类型进行估算
+                if (size === 0) {
+                    size = this.estimateFileSizeByType(file);
+                }
+                
+                switch (this.currentSizeFilter) {
+                    case 'small':
+                        const sizeInMB = size / (1024 * 1024);
+                        return sizeInMB < 1;
+                    case 'medium':
+                        const sizeInMB2 = size / (1024 * 1024);
+                        return sizeInMB2 >= 1 && sizeInMB2 <= 10;
+                    case 'large':
+                        const sizeInMB3 = size / (1024 * 1024);
+                        return sizeInMB3 > 10;
+                    case 'custom':
+                        // 自定义范围过滤
+                        const minBytes = this.convertSizeToBytes(this.customSizeRange.min, this.customSizeRange.minUnit);
+                        const maxBytes = this.customSizeRange.max !== null ? 
+                            this.convertSizeToBytes(this.customSizeRange.max, this.customSizeRange.maxUnit) : 
+                            null;
+                        
+                        if (maxBytes !== null) {
+                            return size >= minBytes && size <= maxBytes;
+                        } else {
+                            return size >= minBytes;
+                        }
+                    default:
+                        return true;
+                }
+            });
+        }
+        
         // 按时间排序，新的在前面
         return files.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
@@ -1763,10 +2064,13 @@ class ContentScanner {
     }
     
     formatPreviewFileSize(size) {
-        if (!size) return '未知大小';
-        if (size < 1024) return size + ' 字节';
-        if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
-        return (size / (1024 * 1024)).toFixed(1) + ' MB';
+        if (!size || size === 0) return '未知大小';
+        
+        const bytes = Number(size);
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
     }
     
     truncateText(text, maxLength) {
@@ -1814,6 +2118,80 @@ class ContentScanner {
         });
         
         this.renderPreviewFileList();
+    }
+    
+    switchSizeFilter(size) {
+        this.currentSizeFilter = size;
+        
+        // 更新按钮状态
+        this.previewPanel.querySelectorAll('.filter-btn.size').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.size === size);
+        });
+        
+        // 显示或隐藏自定义范围输入
+        const rangeRow = this.previewPanel.querySelector('#size-range-row');
+        if (size === 'custom') {
+            rangeRow.style.display = 'block';
+            // 设置默认值
+            this.previewPanel.querySelector('#min-size-input').value = this.customSizeRange.min || '';
+            this.previewPanel.querySelector('#max-size-input').value = this.customSizeRange.max || '';
+            this.previewPanel.querySelector('#min-size-unit').value = this.customSizeRange.minUnit;
+            this.previewPanel.querySelector('#max-size-unit').value = this.customSizeRange.maxUnit;
+        } else {
+            rangeRow.style.display = 'none';
+        }
+        
+        this.renderPreviewFileList();
+    }
+    
+    applySizeRange() {
+        const minInput = this.previewPanel.querySelector('#min-size-input');
+        const maxInput = this.previewPanel.querySelector('#max-size-input');
+        const minUnitSelect = this.previewPanel.querySelector('#min-size-unit');
+        const maxUnitSelect = this.previewPanel.querySelector('#max-size-unit');
+        const applyBtn = this.previewPanel.querySelector('#apply-size-range');
+        
+        // 获取输入值
+        const minValue = parseFloat(minInput.value) || 0;
+        const maxValue = maxInput.value ? parseFloat(maxInput.value) : null;
+        const minUnit = minUnitSelect.value;
+        const maxUnit = maxUnitSelect.value;
+        
+        // 验证输入
+        if (maxValue !== null && maxValue <= minValue) {
+            alert('最大值必须大于最小值！');
+            return;
+        }
+        
+        // 保存范围设置
+        this.customSizeRange = {
+            min: minValue,
+            max: maxValue,
+            minUnit: minUnit,
+            maxUnit: maxUnit
+        };
+        
+        // 显示应用成功状态
+        const originalText = applyBtn.textContent;
+        applyBtn.textContent = '✅ 已应用';
+        applyBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        
+        setTimeout(() => {
+            applyBtn.textContent = originalText;
+            applyBtn.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+        }, 1000);
+        
+        // 重新渲染文件列表
+        this.renderPreviewFileList();
+    }
+    
+    convertSizeToBytes(value, unit) {
+        const multipliers = {
+            'KB': 1024,
+            'MB': 1024 * 1024,
+            'GB': 1024 * 1024 * 1024
+        };
+        return value * (multipliers[unit] || 1);
     }
     
     selectAllPreviewFiles() {
