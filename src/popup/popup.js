@@ -73,6 +73,21 @@ class WebDownloadHelper {
         document.getElementById('reset-settings').addEventListener('click', () => {
             this.resetSettings();
         });
+        
+        // 小红书相关按钮
+        const xiaohongshuStartBtn = document.getElementById('xiaohongshu-start');
+        if (xiaohongshuStartBtn) {
+            xiaohongshuStartBtn.addEventListener('click', () => {
+                startXiaohongshuCapture();
+            });
+        }
+        
+        const xiaohongshuVisitBtn = document.getElementById('xiaohongshu-visit');
+        if (xiaohongshuVisitBtn) {
+            xiaohongshuVisitBtn.addEventListener('click', () => {
+                window.open('https://www.xiaohongshu.com', '_blank');
+            });
+        }
     }
     
     setupTabSwitching() {
@@ -398,6 +413,34 @@ class WebDownloadHelper {
     }
     
 
+}
+
+// 小红书功能
+async function startXiaohongshuCapture() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        // 检查是否在小红书页面
+        if (!tab.url.includes('xiaohongshu.com')) {
+            alert('请在小红书页面使用此功能！');
+            return;
+        }
+        
+        // 发送消息到content script开始获取
+        const response = await chrome.tabs.sendMessage(tab.id, {
+            action: 'startXiaohongshuCapture'
+        });
+        
+        if (response && response.success) {
+            // 关闭弹窗
+            window.close();
+        } else {
+            alert('获取失败，请确保页面已完全加载');
+        }
+    } catch (error) {
+        console.error('小红书获取失败:', error);
+        alert('获取失败: ' + error.message);
+    }
 }
 
 // 初始化

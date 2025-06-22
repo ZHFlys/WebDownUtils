@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Web批量下载助手",
+  "name": "WebDownUtils - 智能批量下载助手",
   "version": "1.0.0",
-  "description": "智能批量下载工具，支持整页、区域选择下载",
+  "description": "智能批量下载工具，支持页面扫描+网络监听双重获取，四级过滤系统，实时预览面板，多种下载模式，专属小红书优化",
   "permissions": [
     "activeTab",
     "storage",
@@ -17,7 +17,7 @@
   ],
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "Web批量下载助手",
+    "default_title": "WebDownUtils - 智能批量下载助手",
     "default_icon": {
       "32": "assets/icons/icon32.png",
       "48": "assets/icons/icon48.png",

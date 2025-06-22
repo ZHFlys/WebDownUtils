@@ -169,9 +169,14 @@
         
         <div class="tab-content" id="platforms-tab" style="display: none;">
             <div class="platforms-section">
-                <div class="platforms-header">
-                    <h2>🌐 平台拓展</h2>
-                    <p class="platforms-desc">支持多平台的批量下载功能</p>
+                <div class="platforms-note">
+                    <h3>💡 使用提示</h3>
+                    <ul>
+                        <li>在支持的平台页面使用扩展功能</li>
+                        <li>部分平台可能需要登录才能正常使用</li>
+                        <li>请遵守各平台的使用条款和版权规定</li>
+                        <li>建议仅下载自己创作或有权使用的内容</li>
+                    </ul>
                 </div>
                 
                 <div class="platform-cards">
@@ -180,19 +185,19 @@
                         <div class="platform-info">
                             <h3>小红书</h3>
                             <p class="platform-status">✅ 已支持</p>
-                            <p class="platform-description">支持下载小红书的图片、视频内容</p>
+                            <p class="platform-description">套图视频集合保存，一键获取媒体内容</p>
                         </div>
                         <div class="platform-features">
-                            <div class="feature-tag">图片下载</div>
+                            <div class="feature-tag">套图下载</div>
                             <div class="feature-tag">视频下载</div>
-                            <div class="feature-tag">批量处理</div>
+                            <div class="feature-tag">集合保存</div>
                         </div>
                         <div class="platform-actions">
-                            <button class="platform-btn" onclick="window.open('https://www.xiaohongshu.com', '_blank')">
-                                🔗 访问平台
+                            <button class="platform-btn" id="xiaohongshu-start">
+                                🚀 开始获取
                             </button>
-                            <button class="platform-btn secondary" onclick="alert('请在小红书页面使用扩展功能')">
-                                📖 使用说明
+                            <button class="platform-btn secondary" id="xiaohongshu-visit">
+                                🔗 访问平台
                             </button>
                         </div>
                     </div>
@@ -202,7 +207,7 @@
                         <div class="platform-info">
                             <h3>抖音</h3>
                             <p class="platform-status">🚧 开发中</p>
-                            <p class="platform-description">即将支持抖音视频和音频下载</p>
+                            <p class="platform-description">短视频和音频下载，支持批量处理</p>
                         </div>
                         <div class="platform-features">
                             <div class="feature-tag disabled">视频下载</div>
@@ -211,7 +216,7 @@
                         </div>
                         <div class="platform-actions">
                             <button class="platform-btn disabled" disabled>
-                                ⏳ 敬请期待
+                                ⏳ 开发中
                             </button>
                         </div>
                     </div>
@@ -219,9 +224,9 @@
                     <div class="platform-card coming-soon">
                         <div class="platform-icon">📺</div>
                         <div class="platform-info">
-                            <h3>B站</h3>
-                            <p class="platform-status">📋 计划中</p>
-                            <p class="platform-description">计划支持B站视频和弹幕下载</p>
+                            <h3>哔哩哔哩</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">视频、弹幕、封面下载，支持多清晰度</p>
                         </div>
                         <div class="platform-features">
                             <div class="feature-tag disabled">视频下载</div>
@@ -230,20 +235,124 @@
                         </div>
                         <div class="platform-actions">
                             <button class="platform-btn disabled" disabled>
-                                📅 规划中
+                                ⏳ 开发中
                             </button>
                         </div>
                     </div>
-                </div>
-                
-                <div class="platforms-note">
-                    <h3>💡 使用提示</h3>
-                    <ul>
-                        <li>在支持的平台页面使用扩展功能</li>
-                        <li>部分平台可能需要登录才能正常使用</li>
-                        <li>请遵守各平台的使用条款和版权规定</li>
-                        <li>建议仅下载自己创作或有权使用的内容</li>
-                    </ul>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">🎬</div>
+                        <div class="platform-info">
+                            <h3>快手</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">短视频和直播回放下载</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">直播回放</div>
+                            <div class="feature-tag disabled">封面保存</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 开发中
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">📷</div>
+                        <div class="platform-info">
+                            <h3>Instagram</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">图片、视频、Story下载</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">图片下载</div>
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">Story保存</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 开发中
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">🐦</div>
+                        <div class="platform-info">
+                            <h3>Twitter/X</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">推文图片、视频、GIF下载</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">图片下载</div>
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">GIF保存</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 开发中
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">🎭</div>
+                        <div class="platform-info">
+                            <h3>微博</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">微博图片、视频、长图下载</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">图片下载</div>
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">长图保存</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 开发中
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">📌</div>
+                        <div class="platform-info">
+                            <h3>Pinterest</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">高清图片批量下载，支持画板保存</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">高清图片</div>
+                            <div class="feature-tag disabled">画板下载</div>
+                            <div class="feature-tag disabled">批量保存</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 开发中
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-card coming-soon">
+                        <div class="platform-icon">🎥</div>
+                        <div class="platform-info">
+                            <h3>YouTube</h3>
+                            <p class="platform-status">🚧 开发中</p>
+                            <p class="platform-description">视频、音频、字幕下载，多格式支持</p>
+                        </div>
+                        <div class="platform-features">
+                            <div class="feature-tag disabled">视频下载</div>
+                            <div class="feature-tag disabled">音频提取</div>
+                            <div class="feature-tag disabled">字幕下载</div>
+                        </div>
+                        <div class="platform-actions">
+                            <button class="platform-btn disabled" disabled>
+                                ⏳ 开发中
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

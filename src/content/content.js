@@ -53,6 +53,9 @@ class ContentScanner {
                     this.hidePreviewPanel();
                     sendResponse({ success: true });
                     break;
+                case 'startXiaohongshuCapture':
+                    this.startXiaohongshuCapture().then(sendResponse);
+                    return true; // 异步响应
             }
         });
     }
@@ -612,7 +615,7 @@ class ContentScanner {
                 element.style.outlineOffset = '';
             }, 2000);
             
-            this.showPreviewPanel(uniqueFiles, []);
+            this.showPreviewPanel(uniqueFiles, [], {}, true);
         } else {
             alert('在选择的元素内未找到可下载的文件');
         }
@@ -849,7 +852,7 @@ class ContentScanner {
         }
     }
     
-    showPreviewPanel(files, selectedFiles, settings) {
+    showPreviewPanel(files, selectedFiles, settings, disableAutoRefresh = false, isXiaohongshuMode = false) {
         // 为初始文件设置正确的来源标记
         const initialFiles = (files || []).map(file => ({
             ...file,
@@ -859,6 +862,7 @@ class ContentScanner {
         this.foundFiles = initialFiles;
         this.selectedFiles = selectedFiles || [];
         this.currentSettings = settings || {};
+        this.isXiaohongshuMode = isXiaohongshuMode; // 标记是否为小红书模式
         
         if (this.previewPanel) {
             this.hidePreviewPanel();
@@ -867,9 +871,31 @@ class ContentScanner {
         this.createPreviewPanel();
         this.updatePreviewContent();
         
-        // 启动网络监听和定时刷新
-        this.startNetworkMonitoring();
-        this.setupNetworkFileRefresh();
+        // 只有在不禁用自动刷新时才启动网络监听和定时刷新
+        if (!disableAutoRefresh) {
+            this.startNetworkMonitoring();
+            this.setupNetworkFileRefresh();
+        } else {
+            // 处理网络监听提示
+            const networkTip = this.previewPanel.querySelector('#network-monitor-tip');
+            if (networkTip) {
+                if (isXiaohongshuMode) {
+                    // 小红书模式：显示平台专属提示并启动视频监听
+                    networkTip.innerHTML = `
+                        <span class="tip-icon">🎯</span>
+                        <span class="tip-text">小红书平台专属模式 - 监听视频文件</span>
+                    `;
+                    networkTip.style.background = 'linear-gradient(90deg, #fef3c7, #fde68a)';
+                    networkTip.style.color = '#92400e';
+                    
+                    // 启动小红书模式的网络监听（只监听视频）
+                    this.startNetworkMonitoring();
+                    this.setupNetworkFileRefresh();
+                } else {
+                    networkTip.style.display = 'none';
+                }
+            }
+        }
     }
     
     hidePreviewPanel() {
@@ -961,7 +987,7 @@ class ContentScanner {
                     </div>
                 </div>
                 
-                <div class="network-monitor-tip">
+                <div class="network-monitor-tip" id="network-monitor-tip">
                     <span class="tip-icon">🔄</span>
                     <span class="tip-text">持续监听网页文件中...</span>
                 </div>
@@ -3049,30 +3075,58 @@ class ContentScanner {
         refreshBtn.style.opacity = '0.6';
         
         try {
-            // 获取当前设置
-            const settings = await new Promise((resolve) => {
-                chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
-            });
+            let allFiles = [];
             
-            // 更新当前设置
-            this.currentSettings = settings;
-            
-            // 同时获取页面文件和网络文件
-            const [pageResult, networkFiles] = await Promise.all([
-                this.scanPage(settings),
-                new Promise((resolve) => {
-                    chrome.runtime.sendMessage({ action: 'getNetworkFiles' }, resolve);
-                })
-            ]);
-            
-            // 从scanPage结果中提取文件数组，并设置来源标记
-            const pageFiles = (pageResult && pageResult.files ? pageResult.files : []).map(file => ({
-                ...file,
-                source: file.source || 'page'
-            }));
-            
-            // 合并文件列表，去重
-            const allFiles = this.mergeFiles(pageFiles, networkFiles || []);
+            if (this.isXiaohongshuMode) {
+                // 小红书模式：只获取小红书专属文件
+                const xiaohongshuResult = await this.startXiaohongshuCapture(true);
+                if (xiaohongshuResult.success) {
+                    allFiles = xiaohongshuResult.files || this.foundFiles;
+                    refreshBtn.textContent = `✅ 已更新 (小红书:${allFiles.length})`;
+                } else {
+                    refreshBtn.textContent = '❌ 无文件';
+                }
+            } else {
+                // 普通模式：获取页面文件和网络文件
+                const settings = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
+                });
+                
+                // 更新当前设置
+                this.currentSettings = settings;
+                
+                // 同时获取页面文件和网络文件
+                const [pageResult, networkFiles] = await Promise.all([
+                    this.scanPage(settings),
+                    new Promise((resolve) => {
+                        chrome.runtime.sendMessage({ action: 'getNetworkFiles' }, resolve);
+                    })
+                ]);
+                
+                // 从scanPage结果中提取文件数组，并设置来源标记
+                const pageFiles = (pageResult && pageResult.files ? pageResult.files : []).map(file => ({
+                    ...file,
+                    source: file.source || 'page'
+                }));
+                
+                // 如果是小红书模式，过滤网络文件只保留视频
+                let filteredNetworkFiles = networkFiles || [];
+                if (this.isXiaohongshuMode) {
+                    filteredNetworkFiles = (networkFiles || []).filter(file => file.type === 'video');
+                }
+                
+                // 合并文件列表，去重
+                allFiles = this.mergeFiles(pageFiles, filteredNetworkFiles);
+                
+                // 显示成功提示
+                const pageCount = Array.isArray(pageFiles) ? pageFiles.length : 0;
+                const networkCount = Array.isArray(filteredNetworkFiles) ? filteredNetworkFiles.length : 0;
+                if (this.isXiaohongshuMode) {
+                    refreshBtn.textContent = `✅ 已更新 (页面:${pageCount} 视频:${networkCount})`;
+                } else {
+                    refreshBtn.textContent = `✅ 已更新 (页面:${pageCount} 网络:${networkCount})`;
+                }
+            }
             
             if (allFiles && allFiles.length > 0) {
                 // 更新文件列表
@@ -3085,16 +3139,14 @@ class ContentScanner {
                 // 更新预览内容
                 this.updatePreviewContent();
                 
-                // 显示成功提示
-                const pageCount = Array.isArray(pageFiles) ? pageFiles.length : 0;
-                const networkCount = Array.isArray(networkFiles) ? networkFiles.length : 0;
-                refreshBtn.textContent = `✅ 已更新 (页面:${pageCount} 网络:${networkCount})`;
                 setTimeout(() => {
                     refreshBtn.textContent = originalText;
                 }, 2000);
             } else {
                 // 没有找到文件
-                refreshBtn.textContent = '❌ 无文件';
+                if (!this.isXiaohongshuMode) {
+                    refreshBtn.textContent = '❌ 无文件';
+                }
                 setTimeout(() => {
                     refreshBtn.textContent = originalText;
                 }, 1500);
@@ -4018,7 +4070,7 @@ class ContentScanner {
             case 'page': return '页面文件';
             case 'network': return '网络文件';
             case 'both': return '页面和网络文件';
-            default: return '未知来源';
+            default: return '页面文件';
         }
     }
     
@@ -4071,11 +4123,18 @@ class ContentScanner {
             });
             
             if (networkFiles && networkFiles.length > 0) {
+                let filteredNetworkFiles = networkFiles;
+                
+                // 如果是小红书模式，只保留视频文件
+                if (this.isXiaohongshuMode) {
+                    filteredNetworkFiles = networkFiles.filter(file => file.type === 'video');
+                }
+                
                 // 保留所有现有文件（包括页面文件和之前的网络文件）
                 const existingFiles = this.foundFiles.filter(file => 
                     file.source === 'page' || file.source === 'both' || file.source === 'network'
                 );
-                const allFiles = this.mergeFiles(existingFiles, networkFiles);
+                const allFiles = this.mergeFiles(existingFiles, filteredNetworkFiles);
                 
                 // 检查是否有新文件
                 const oldCount = this.foundFiles.length;
@@ -4191,6 +4250,123 @@ class ContentScanner {
         } catch (error) {
             console.error('创建压缩包失败:', error);
             this.showNotification('创建压缩包失败: ' + error.message, 'error');
+        }
+    }
+    
+    // 小红书功能
+    async startXiaohongshuCapture(refreshMode = false) {
+        try {
+            // 检查是否在小红书页面
+            if (!window.location.href.includes('xiaohongshu.com')) {
+                return { success: false, error: '请在小红书页面使用此功能' };
+            }
+            
+            const files = [];
+            const currentTime = new Date();
+            
+            // 尝试多种选择器来适配小红书的DOM结构变化
+            const selectors = [
+                // 原始选择器
+                '.media-container img',
+                '.media-container video',
+                
+            ];
+            
+            // 收集所有找到的元素，避免重复
+            const foundElements = new Set();
+            
+            selectors.forEach(selector => {
+                try {
+                    const elements = document.querySelectorAll(selector);
+                    elements.forEach(element => {
+                        // 使用元素的outerHTML作为唯一标识，避免重复
+                        const elementKey = element.tagName + '|' + (element.src || element.dataset.src || element.dataset.original || '');
+                        if (elementKey !== 'IMG|' && elementKey !== 'VIDEO|' && !foundElements.has(elementKey)) {
+                            foundElements.add(elementKey);
+                            
+                            if (element.tagName === 'IMG') {
+                                const src = element.src || element.dataset.src || element.dataset.original || element.getAttribute('data-lazy');
+                                if (src && this.isValidUrl(src)) {
+                                    // 过滤掉明显的头像、图标等小图片
+                                    const rect = element.getBoundingClientRect();
+                                    if (rect.width > 50 && rect.height > 50) {
+                                        files.push({
+                                            type: 'image',
+                                            url: src,
+                                            name: this.extractFilename(src) || `xiaohongshu_image_${files.length}`,
+                                            element: element,
+                                            alt: element.alt || '',
+                                            size: this.getEstimatedSize(element),
+                                            timestamp: currentTime.getTime(),
+                                            timeString: this.formatTime(currentTime),
+                                            source: 'page'
+                                        });
+                                    }
+                                }
+                            } else if (element.tagName === 'VIDEO') {
+                                const src = element.src || element.currentSrc;
+                                if (src && this.isValidUrl(src)) {
+                                    files.push({
+                                        type: 'video',
+                                        url: src,
+                                        name: this.extractFilename(src) || `xiaohongshu_video_${files.length}`,
+                                        element: element,
+                                        size: this.getEstimatedSize(element),
+                                        timestamp: currentTime.getTime(),
+                                        timeString: this.formatTime(currentTime),
+                                        source: 'page'
+                                    });
+                                }
+                                
+                                // 检查video元素内的source标签
+                                const sources = element.querySelectorAll('source');
+                                sources.forEach(source => {
+                                    if (source.src && this.isValidUrl(source.src)) {
+                                        files.push({
+                                            type: 'video',
+                                            url: source.src,
+                                            name: this.extractFilename(source.src) || `xiaohongshu_video_source_${files.length}`,
+                                            element: element,
+                                            size: this.getEstimatedSize(element),
+                                            timestamp: currentTime.getTime(),
+                                            timeString: this.formatTime(currentTime),
+                                            source: 'page'
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.warn(`选择器 ${selector} 执行失败:`, error);
+                }
+            });
+            
+            if (refreshMode) {
+                // 刷新模式：只更新文件列表，不显示预览面板
+                this.foundFiles = files;
+                if (files.length === 0) {
+                    return { success: false, error: '未找到任何图片或视频，请确保页面已完全加载' };
+                }
+                return { success: true, count: files.length, files: files };
+            } else {
+                // 正常模式：无论是否找到文件都显示预览面板
+                this.showPreviewPanel(files, [], {}, true, true);
+                
+                if (files.length === 0) {
+                    // 没有找到文件时也显示通知，但仍然显示预览面板
+                    this.showNotification('未找到任何图片或视频，但已进入小红书专属模式', 'info');
+                } else {
+                    // 找到文件时显示成功通知
+                    this.showNotification(`成功获取到 ${files.length} 个媒体文件`, 'success');
+                }
+                
+                return { success: true, count: files.length };
+            }
+            
+        } catch (error) {
+            console.error('小红书获取失败:', error);
+            return { success: false, error: error.message };
         }
     }
 }
