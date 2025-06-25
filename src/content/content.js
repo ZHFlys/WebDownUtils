@@ -4180,7 +4180,7 @@ class ContentScanner {
             // 创建一个Promise数组来并行下载文件
             const downloadPromises = this.selectedFiles.map(async (file, index) => {
                 try {
-                    const fileName = this.ensureFileExtension(
+                    let fileName = this.ensureFileExtension(
                         file.name || this.extractFilename(file.url) || `文件_${index + 1}`,
                         file.url,
                         file.type
@@ -4198,7 +4198,19 @@ class ContentScanner {
                         throw new Error(`HTTP ${response.status}`);
                     }
                     
-                    const blob = await response.blob();
+                    let blob = await response.blob();
+                    
+                    // 如果启用了格式转换且是图片文件，进行转换
+                    if (this.currentSettings?.enableFormatConversion && this.isImageFile(file)) {
+                        try {
+                            blob = await this.convertImageFormat(blob, this.currentSettings.targetFormat, this.currentSettings.conversionQuality);
+                            // 更新文件名扩展名
+                            fileName = this.updateFileExtension(fileName, this.currentSettings.targetFormat);
+                        } catch (conversionError) {
+                            console.warn('图片格式转换失败，使用原始格式:', conversionError);
+                            // 转换失败时保持原始blob和文件名
+                        }
+                    }
                     
                     // 添加到ZIP
                     zip.file(fileName, blob);
@@ -4368,6 +4380,77 @@ class ContentScanner {
             console.error('小红书获取失败:', error);
             return { success: false, error: error.message };
         }
+    }
+    
+    // 图片格式转换相关方法
+    isImageFile(file) {
+        if (file.type === 'image') return true;
+        
+        const url = file.url || '';
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+        return imageExtensions.some(ext => url.toLowerCase().includes(ext));
+    }
+    
+    updateFileExtension(filePath, newExtension) {
+        const lastDotIndex = filePath.lastIndexOf('.');
+        if (lastDotIndex === -1) {
+            return `${filePath}.${newExtension}`;
+        }
+        return `${filePath.substring(0, lastDotIndex)}.${newExtension}`;
+    }
+    
+    async convertImageFormat(blob, targetFormat, quality = 0.8) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            img.onload = () => {
+                try {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // 绘制图片到canvas
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // 根据目标格式转换
+                    let mimeType;
+                    switch (targetFormat) {
+                        case 'jpg':
+                        case 'jpeg':
+                            mimeType = 'image/jpeg';
+                            break;
+                        case 'png':
+                            mimeType = 'image/png';
+                            break;
+                        case 'webp':
+                            mimeType = 'image/webp';
+                            break;
+                        default:
+                            mimeType = 'image/jpeg';
+                    }
+                    
+                    // 转换为blob
+                    canvas.toBlob((convertedBlob) => {
+                        if (convertedBlob) {
+                            resolve(convertedBlob);
+                        } else {
+                            reject(new Error('图片转换失败'));
+                        }
+                    }, mimeType, quality);
+                    
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            
+            img.onerror = () => {
+                reject(new Error('图片加载失败'));
+            };
+            
+            // 加载图片
+            img.src = URL.createObjectURL(blob);
+        });
     }
 }
 

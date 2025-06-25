@@ -11,6 +11,9 @@ class WebDownloadHelper {
             downloadDelay: 0.5,
             zipThreshold: 3,
             showFormatFilter: false,
+            enableFormatConversion: false,
+            targetFormat: 'jpg',
+            conversionQuality: 0.8,
             formats: {
                 // 图片格式
                 jpg: true,
@@ -74,6 +77,28 @@ class WebDownloadHelper {
             this.resetSettings();
         });
         
+        // 格式转换相关事件
+        const enableConversionCheckbox = document.getElementById('enable-format-conversion');
+        if (enableConversionCheckbox) {
+            enableConversionCheckbox.addEventListener('change', (e) => {
+                this.toggleConversionOptions(e.target.checked);
+            });
+        }
+        
+        const targetFormatSelect = document.getElementById('target-format');
+        if (targetFormatSelect) {
+            targetFormatSelect.addEventListener('change', (e) => {
+                this.updateQualityVisibility(e.target.value);
+            });
+        }
+        
+        const qualitySlider = document.getElementById('conversion-quality');
+        if (qualitySlider) {
+            qualitySlider.addEventListener('input', (e) => {
+                document.getElementById('quality-display').textContent = Math.round(e.target.value * 100) + '%';
+            });
+        }
+
         // 小红书相关按钮
         const xiaohongshuStartBtn = document.getElementById('xiaohongshu-start');
         if (xiaohongshuStartBtn) {
@@ -312,6 +337,14 @@ class WebDownloadHelper {
         document.getElementById('download-delay').value = this.settings.downloadDelay;
         document.getElementById('show-format-filter').checked = this.settings.showFormatFilter;
         
+        // 更新格式转换UI
+        document.getElementById('enable-format-conversion').checked = this.settings.enableFormatConversion;
+        document.getElementById('target-format').value = this.settings.targetFormat;
+        document.getElementById('conversion-quality').value = this.settings.conversionQuality;
+        document.getElementById('quality-display').textContent = Math.round(this.settings.conversionQuality * 100) + '%';
+        this.toggleConversionOptions(this.settings.enableFormatConversion);
+        this.updateQualityVisibility(this.settings.targetFormat);
+        
         // 更新格式配置UI
         if (this.settings.formats) {
             Object.keys(this.settings.formats).forEach(format => {
@@ -333,6 +366,11 @@ class WebDownloadHelper {
         this.settings.zipThreshold = parseInt(document.getElementById('zip-threshold').value);
         this.settings.downloadDelay = parseFloat(document.getElementById('download-delay').value);
         this.settings.showFormatFilter = document.getElementById('show-format-filter').checked;
+        
+        // 从UI获取格式转换设置
+        this.settings.enableFormatConversion = document.getElementById('enable-format-conversion').checked;
+        this.settings.targetFormat = document.getElementById('target-format').value;
+        this.settings.conversionQuality = parseFloat(document.getElementById('conversion-quality').value);
         
         // 从UI获取格式配置
         if (this.settings.formats) {
@@ -371,6 +409,9 @@ class WebDownloadHelper {
                 zipThreshold: 3,
                 downloadDelay: 0.5,
                 showFormatFilter: false,
+                enableFormatConversion: false,
+                targetFormat: 'jpg',
+                conversionQuality: 0.8,
                 formats: {
                     // 图片格式
                     jpg: true,
@@ -412,6 +453,31 @@ class WebDownloadHelper {
         }
     }
     
+    // 格式转换相关方法
+    toggleConversionOptions(enabled) {
+        const conversionOptions = document.getElementById('conversion-options');
+        const qualityOptions = document.getElementById('quality-options');
+        
+        if (conversionOptions) {
+            conversionOptions.style.display = enabled ? 'block' : 'none';
+        }
+        if (qualityOptions) {
+            qualityOptions.style.display = enabled ? 'block' : 'none';
+        }
+        
+        if (enabled) {
+            this.updateQualityVisibility(document.getElementById('target-format').value);
+        }
+    }
+    
+    updateQualityVisibility(format) {
+        const qualityOptions = document.getElementById('quality-options');
+        if (qualityOptions) {
+            // 只有JPG和WebP格式支持质量设置
+            const showQuality = format === 'jpg' || format === 'webp';
+            qualityOptions.style.display = showQuality ? 'block' : 'none';
+        }
+    }
 
 }
 

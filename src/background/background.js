@@ -159,6 +159,67 @@ class BackgroundService {
         const fullPath = folder ? `${settings.savePath}/${folder}/${filename}` : `${settings.savePath}/${filename}`;
         
         try {
+            // 如果启用了格式转换且是图片文件，进行转换处理
+            if (settings.enableFormatConversion && this.isImageFile(file)) {
+                return await this.downloadAndConvertImage(file, fullPath, settings);
+            } else {
+                // 直接下载
+                const downloadId = await chrome.downloads.download({
+                    url: file.url,
+                    filename: fullPath,
+                    conflictAction: 'uniquify',
+                    saveAs: false
+                });
+                
+                this.activeDownloads.add(downloadId);
+                this.downloadQueue.set(downloadId, file);
+                
+                return downloadId;
+            }
+        } catch (error) {
+            throw new Error(`下载失败: ${error.message}`);
+        }
+    }
+    
+    async downloadAndConvertImage(file, fullPath, settings) {
+        try {
+            // 获取图片数据
+            const response = await fetch(file.url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const blob = await response.blob();
+            
+            // 转换图片格式
+            const convertedBlob = await this.convertImageFormat(blob, settings.targetFormat, settings.conversionQuality);
+            
+            // 更新文件路径以匹配新格式
+            const convertedPath = this.updateFileExtension(fullPath, settings.targetFormat);
+            
+            // 创建对象URL并下载
+            const objectUrl = URL.createObjectURL(convertedBlob);
+            
+            const downloadId = await chrome.downloads.download({
+                url: objectUrl,
+                filename: convertedPath,
+                conflictAction: 'uniquify',
+                saveAs: false
+            });
+            
+            this.activeDownloads.add(downloadId);
+            this.downloadQueue.set(downloadId, file);
+            
+            // 清理对象URL
+            setTimeout(() => {
+                URL.revokeObjectURL(objectUrl);
+            }, 5000);
+            
+            return downloadId;
+            
+        } catch (error) {
+            console.error('图片转换失败:', error);
+            // 转换失败时回退到直接下载
             const downloadId = await chrome.downloads.download({
                 url: file.url,
                 filename: fullPath,
@@ -170,8 +231,6 @@ class BackgroundService {
             this.downloadQueue.set(downloadId, file);
             
             return downloadId;
-        } catch (error) {
-            throw new Error(`下载失败: ${error.message}`);
         }
     }
     
@@ -330,6 +389,9 @@ class BackgroundService {
             zipThreshold: 3,
             downloadDelay: 0.5,
             showFormatFilter: false,
+            enableFormatConversion: false,
+            targetFormat: 'jpg',
+            conversionQuality: 0.8,
             includeImages: true,
             includeVideos: true,
             includeDocuments: true,
@@ -366,6 +428,77 @@ class BackgroundService {
         
         const stored = await chrome.storage.sync.get(defaultSettings);
         return stored;
+    }
+    
+    // 图片格式转换相关方法
+    isImageFile(file) {
+        if (file.type === 'image') return true;
+        
+        const url = file.url || '';
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+        return imageExtensions.some(ext => url.toLowerCase().includes(ext));
+    }
+    
+    updateFileExtension(filePath, newExtension) {
+        const lastDotIndex = filePath.lastIndexOf('.');
+        if (lastDotIndex === -1) {
+            return `${filePath}.${newExtension}`;
+        }
+        return `${filePath.substring(0, lastDotIndex)}.${newExtension}`;
+    }
+    
+    async convertImageFormat(blob, targetFormat, quality = 0.8) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            img.onload = () => {
+                try {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // 绘制图片到canvas
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // 根据目标格式转换
+                    let mimeType;
+                    switch (targetFormat) {
+                        case 'jpg':
+                        case 'jpeg':
+                            mimeType = 'image/jpeg';
+                            break;
+                        case 'png':
+                            mimeType = 'image/png';
+                            break;
+                        case 'webp':
+                            mimeType = 'image/webp';
+                            break;
+                        default:
+                            mimeType = 'image/jpeg';
+                    }
+                    
+                    // 转换为blob
+                    canvas.toBlob((convertedBlob) => {
+                        if (convertedBlob) {
+                            resolve(convertedBlob);
+                        } else {
+                            reject(new Error('图片转换失败'));
+                        }
+                    }, mimeType, quality);
+                    
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            
+            img.onerror = () => {
+                reject(new Error('图片加载失败'));
+            };
+            
+            // 加载图片
+            img.src = URL.createObjectURL(blob);
+        });
     }
     
     notifyDownloadComplete(downloadId) {

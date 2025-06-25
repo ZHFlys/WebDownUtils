@@ -712,4 +712,75 @@ body {
     color: #064e3b;
     margin-bottom: 4px;
     line-height: 1.4;
+}
+
+/* 格式转换设置样式 */
+.setting-item input[type="range"] {
+    width: 100%;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+    margin: 8px 0;
+}
+
+.setting-item input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #4f46e5;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.setting-item input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #4f46e5;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+#quality-display {
+    font-weight: 600;
+    color: #4f46e5;
+    margin-left: 8px;
+}
+
+.setting-item select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    transition: border-color 0.3s ease;
+}
+
+.setting-item select:focus {
+    outline: none;
+    border-color: #4f46e5;
+}
+
+/* 格式转换选项的显示/隐藏动画 */
+#conversion-options, #quality-options {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+#conversion-options[style*="display: none"], 
+#quality-options[style*="display: none"] {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+}
+
+#conversion-options[style*="display: block"], 
+#quality-options[style*="display: block"] {
+    max-height: 200px;
+    opacity: 1;
 } 
