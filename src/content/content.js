@@ -3273,22 +3273,49 @@ class ContentScanner {
         }
     }
     
-    startDirectDownload() {
+    async startDirectDownload() {
         // 智能下载逻辑：根据配置的阈值决定直接下载还是打包下载
         const zipThreshold = this.currentSettings?.zipThreshold || 3;
         
         if (this.selectedFiles.length < zipThreshold) {
             // 文件数量少于阈值，直接下载
-            chrome.runtime.sendMessage({
-                action: 'startDownload',
-                selectedFiles: this.selectedFiles
-            }, (response) => {
-                if (response && response.success) {
-                    this.showNotification(`开始下载 ${this.selectedFiles.length} 个文件...`, 'success');
-                } else {
-                    this.showNotification('下载失败: ' + (response?.error || '未知错误'), 'error');
-                }
-            });
+            try {
+                // 如果启用了格式转换，先在content script中处理图片转换
+                const processedFiles = await this.processFilesForDirectDownload(this.selectedFiles);
+                
+                chrome.runtime.sendMessage({
+                    action: 'startDownload',
+                    selectedFiles: processedFiles,
+                    settings: this.currentSettings  // 传递当前设置，包括格式转换设置
+                }, (response) => {
+                    if (response && response.success) {
+                        // 生成下载提示消息
+                        let message = `开始下载 ${this.selectedFiles.length} 个文件`;
+                        
+                        // 如果启用了格式转换，添加转换提醒
+                        if (this.currentSettings?.enableFormatConversion) {
+                            const imageCount = this.selectedFiles.filter(file => this.isImageFile(file)).length;
+                            if (imageCount > 0) {
+                                message += `（其中 ${imageCount} 张图片将转换为 ${this.currentSettings.targetFormat.toUpperCase()} 格式）`;
+                            }
+                        }
+                        message += '...';
+                        
+                        this.showNotification(message, 'success');
+                        
+                        // 清理转换后的对象URL
+                        this.cleanupConvertedFiles(processedFiles);
+                    } else {
+                        this.showNotification('下载失败: ' + (response?.error || '未知错误'), 'error');
+                        
+                        // 即使失败也要清理对象URL
+                        this.cleanupConvertedFiles(processedFiles);
+                    }
+                });
+            } catch (error) {
+                console.error('处理文件失败:', error);
+                this.showNotification('处理文件失败: ' + error.message, 'error');
+            }
         } else {
             // 文件数量达到或超过阈值，打包下载
             this.downloadAsZip();
@@ -4181,12 +4208,24 @@ class ContentScanner {
         }
         
         // 显示进度提示
-        this.showNotification('正在创建压缩包，请稍候...', 'info');
+        let message = '正在创建压缩包，请稍候';
+        
+        // 如果启用了格式转换，添加转换提醒
+        if (this.currentSettings?.enableFormatConversion) {
+            const imageCount = this.selectedFiles.filter(file => this.isImageFile(file)).length;
+            if (imageCount > 0) {
+                message += `（将转换 ${imageCount} 张图片为 ${this.currentSettings.targetFormat.toUpperCase()} 格式）`;
+            }
+        }
+        message += '...';
+        
+        this.showNotification(message, 'info');
         
         try {
             const zip = new JSZip();
             let successCount = 0;
             let failCount = 0;
+            let convertedCount = 0;
             
             // 创建一个Promise数组来并行下载文件
             const downloadPromises = this.selectedFiles.map(async (file, index) => {
@@ -4217,6 +4256,7 @@ class ContentScanner {
                             blob = await this.convertImageFormat(blob, this.currentSettings.targetFormat, this.currentSettings.conversionQuality);
                             // 更新文件名扩展名
                             fileName = this.updateFileExtension(fileName, this.currentSettings.targetFormat);
+                            convertedCount++;
                         } catch (conversionError) {
                             console.warn('图片格式转换失败，使用原始格式:', conversionError);
                             // 转换失败时保持原始blob和文件名
@@ -4265,9 +4305,15 @@ class ContentScanner {
             URL.revokeObjectURL(zipUrl);
             
             // 显示完成信息
-            const message = failCount > 0 
+            let message = failCount > 0 
                 ? `压缩包创建完成！成功: ${successCount}, 失败: ${failCount}`
                 : `压缩包创建完成！共包含 ${successCount} 个文件`;
+            
+            // 如果有图片被转换，添加转换信息
+            if (convertedCount > 0) {
+                message += `（已转换 ${convertedCount} 张图片为 ${this.currentSettings.targetFormat.toUpperCase()} 格式）`;
+            }
+            
             this.showNotification(message, 'success');
             
         } catch (error) {
@@ -4415,6 +4461,67 @@ class ContentScanner {
         return `${filePath.substring(0, lastDotIndex)}.${newExtension}`;
     }
     
+    async processFilesForDirectDownload(files) {
+        // 如果没有启用格式转换，直接返回原始文件
+        if (!this.currentSettings?.enableFormatConversion) {
+            return files;
+        }
+        
+        const processedFiles = [];
+        
+        for (const file of files) {
+            if (this.isImageFile(file)) {
+                try {
+                    // 下载图片并转换格式
+                    const response = await fetch(file.url);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const blob = await response.blob();
+                    const convertedBlob = await this.convertImageFormat(blob, this.currentSettings.targetFormat, this.currentSettings.conversionQuality);
+                    
+                    // 创建对象URL
+                    const objectUrl = URL.createObjectURL(convertedBlob);
+                    
+                    // 更新文件信息
+                    const processedFile = {
+                        ...file,
+                        url: objectUrl,
+                        name: this.updateFileExtension(file.name || 'image', this.currentSettings.targetFormat),
+                        isConverted: true, // 标记为已转换
+                        originalUrl: file.url // 保存原始URL
+                    };
+                    
+                    processedFiles.push(processedFile);
+                } catch (error) {
+                    console.warn('图片格式转换失败，使用原始文件:', error);
+                    processedFiles.push(file);
+                }
+            } else {
+                // 非图片文件直接添加
+                processedFiles.push(file);
+            }
+        }
+        
+        return processedFiles;
+    }
+
+    cleanupConvertedFiles(files) {
+        // 延迟清理对象URL，给下载一些时间
+        setTimeout(() => {
+            files.forEach(file => {
+                if (file.isConverted && file.url && file.url.startsWith('blob:')) {
+                    try {
+                        URL.revokeObjectURL(file.url);
+                    } catch (error) {
+                        console.warn('清理对象URL失败:', error);
+                    }
+                }
+            });
+        }, 10000); // 10秒后清理
+    }
+
     async convertImageFormat(blob, targetFormat, quality = 0.8) {
         return new Promise((resolve, reject) => {
             const img = new Image();

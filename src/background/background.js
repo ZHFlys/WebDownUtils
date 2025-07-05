@@ -21,7 +21,7 @@ class BackgroundService {
                     this.handleAreaSelectionComplete(request.files, sender.tab);
                     break;
                 case 'startDownload':
-                    this.handleStartDownload(request.selectedFiles).then(sendResponse);
+                    this.handleStartDownload(request.selectedFiles, request.settings).then(sendResponse);
                     return true;
                 case 'downloadFiles':
                     this.downloadFiles(request.files, request.settings).then(sendResponse);
@@ -97,21 +97,26 @@ class BackgroundService {
         await this.downloadFiles(files, settings);
         
         // 通知用户
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: 'assets/icons/icon48.png',
-            title: 'Web批量下载助手',
-            message: `找到 ${files.length} 个文件，开始下载...`
-        });
+        try {
+            chrome.notifications.create({
+                type: 'basic',
+                iconUrl: 'assets/icons/icon48.png',
+                title: 'Web批量下载助手',
+                message: `找到 ${files.length} 个文件，开始下载...`
+            });
+        } catch (error) {
+            console.warn('无法显示通知:', error);
+        }
     }
     
-    async handleStartDownload(selectedFiles) {
+    async handleStartDownload(selectedFiles, providedSettings = null) {
         if (!selectedFiles || selectedFiles.length === 0) {
             return { success: false, error: '没有选择文件' };
         }
         
         try {
-            const settings = await this.getSettings();
+            // 如果提供了设置，使用提供的设置；否则从存储中获取
+            const settings = providedSettings || await this.getSettings();
             const result = await this.downloadFiles(selectedFiles, settings);
             return { success: true, result };
         } catch (error) {
@@ -126,6 +131,7 @@ class BackgroundService {
         const limitedFiles = files.slice(0, settings.maxFiles);
         let successCount = 0;
         let failCount = 0;
+        let convertedCount = 0;
         
         for (let i = 0; i < limitedFiles.length; i++) {
             const file = limitedFiles[i];
@@ -133,6 +139,11 @@ class BackgroundService {
             try {
                 await this.downloadSingleFile(file, settings, i);
                 successCount++;
+                
+                // 统计转换的图片数量
+                if (file.isConverted) {
+                    convertedCount++;
+                }
             } catch (error) {
                 console.error(`下载失败: ${file.name}`, error);
                 failCount++;
@@ -143,12 +154,23 @@ class BackgroundService {
         }
         
         // 显示完成通知
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: 'assets/icons/icon48.png',
-            title: '下载完成',
-            message: `成功: ${successCount}, 失败: ${failCount}`
-        });
+        try {
+            let message = `成功: ${successCount}, 失败: ${failCount}`;
+            
+            // 如果有图片被转换，添加转换信息
+            if (convertedCount > 0) {
+                message += `（已转换 ${convertedCount} 张图片为 ${settings.targetFormat?.toUpperCase() || 'JPG'} 格式）`;
+            }
+            
+            chrome.notifications.create({
+                type: 'basic',
+                iconUrl: 'assets/icons/icon48.png',
+                title: '下载完成',
+                message: message
+            });
+        } catch (error) {
+            console.warn('无法显示通知:', error);
+        }
         
         return { success: successCount, failed: failCount };
     }
@@ -159,9 +181,36 @@ class BackgroundService {
         const fullPath = folder ? `${settings.savePath}/${folder}/${filename}` : `${settings.savePath}/${filename}`;
         
         try {
-            // 如果启用了格式转换且是图片文件，进行转换处理
-            if (settings.enableFormatConversion && this.isImageFile(file)) {
-                return await this.downloadAndConvertImage(file, fullPath, settings);
+            // 如果文件已经在content script中转换过了（有isConverted标记），直接下载
+            if (file.isConverted) {
+                const downloadId = await chrome.downloads.download({
+                    url: file.url,
+                    filename: fullPath,
+                    conflictAction: 'uniquify',
+                    saveAs: false
+                });
+                
+                this.activeDownloads.add(downloadId);
+                this.downloadQueue.set(downloadId, file);
+                
+                return downloadId;
+            }
+            // 如果启用了格式转换且是图片文件，进行转换处理（后台脚本转换已移除）
+            else if (settings.enableFormatConversion && this.isImageFile(file)) {
+                // 后台脚本中的图片转换已移除，因为Service Worker环境不支持Canvas
+                // 这里回退到直接下载
+                console.warn('后台脚本不支持图片转换，使用原始文件');
+                const downloadId = await chrome.downloads.download({
+                    url: file.url,
+                    filename: fullPath,
+                    conflictAction: 'uniquify',
+                    saveAs: false
+                });
+                
+                this.activeDownloads.add(downloadId);
+                this.downloadQueue.set(downloadId, file);
+                
+                return downloadId;
             } else {
                 // 直接下载
                 const downloadId = await chrome.downloads.download({
@@ -181,58 +230,7 @@ class BackgroundService {
         }
     }
     
-    async downloadAndConvertImage(file, fullPath, settings) {
-        try {
-            // 获取图片数据
-            const response = await fetch(file.url);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const blob = await response.blob();
-            
-            // 转换图片格式
-            const convertedBlob = await this.convertImageFormat(blob, settings.targetFormat, settings.conversionQuality);
-            
-            // 更新文件路径以匹配新格式
-            const convertedPath = this.updateFileExtension(fullPath, settings.targetFormat);
-            
-            // 创建对象URL并下载
-            const objectUrl = URL.createObjectURL(convertedBlob);
-            
-            const downloadId = await chrome.downloads.download({
-                url: objectUrl,
-                filename: convertedPath,
-                conflictAction: 'uniquify',
-                saveAs: false
-            });
-            
-            this.activeDownloads.add(downloadId);
-            this.downloadQueue.set(downloadId, file);
-            
-            // 清理对象URL
-            setTimeout(() => {
-                URL.revokeObjectURL(objectUrl);
-            }, 5000);
-            
-            return downloadId;
-            
-        } catch (error) {
-            console.error('图片转换失败:', error);
-            // 转换失败时回退到直接下载
-            const downloadId = await chrome.downloads.download({
-                url: file.url,
-                filename: fullPath,
-                conflictAction: 'uniquify',
-                saveAs: false
-            });
-            
-            this.activeDownloads.add(downloadId);
-            this.downloadQueue.set(downloadId, file);
-            
-            return downloadId;
-        }
-    }
+
     
     generateFilename(file, settings, index) {
         const extension = this.getFileExtension(file.url) || this.getTypeExtension(file.type);
@@ -263,8 +261,17 @@ class BackgroundService {
     async getFolderName() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab) {
-            const hostname = new URL(tab.url).hostname;
-            return hostname.replace(/[^a-zA-Z0-9]/g, '_');
+            try {
+                const hostname = new URL(tab.url).hostname;
+                return hostname.replace(/[^a-zA-Z0-9]/g, '_');
+            } catch (error) {
+                console.warn('解析URL失败，使用默认文件夹名:', error);
+                // 如果URL解析失败，尝试手动提取域名
+                const match = tab.url.match(/^https?:\/\/([^\/]+)/);
+                if (match) {
+                    return match[1].replace(/[^a-zA-Z0-9]/g, '_');
+                }
+            }
         }
         return 'unknown_site';
     }
@@ -447,59 +454,7 @@ class BackgroundService {
         return `${filePath.substring(0, lastDotIndex)}.${newExtension}`;
     }
     
-    async convertImageFormat(blob, targetFormat, quality = 0.8) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            img.onload = () => {
-                try {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    
-                    // 绘制图片到canvas
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // 根据目标格式转换
-                    let mimeType;
-                    switch (targetFormat) {
-                        case 'jpg':
-                        case 'jpeg':
-                            mimeType = 'image/jpeg';
-                            break;
-                        case 'png':
-                            mimeType = 'image/png';
-                            break;
-                        case 'webp':
-                            mimeType = 'image/webp';
-                            break;
-                        default:
-                            mimeType = 'image/jpeg';
-                    }
-                    
-                    // 转换为blob
-                    canvas.toBlob((convertedBlob) => {
-                        if (convertedBlob) {
-                            resolve(convertedBlob);
-                        } else {
-                            reject(new Error('图片转换失败'));
-                        }
-                    }, mimeType, quality);
-                    
-                } catch (error) {
-                    reject(error);
-                }
-            };
-            
-            img.onerror = () => {
-                reject(new Error('图片加载失败'));
-            };
-            
-            // 加载图片
-            img.src = URL.createObjectURL(blob);
-        });
-    }
+
     
     notifyDownloadComplete(downloadId) {
         const file = this.downloadQueue.get(downloadId);
