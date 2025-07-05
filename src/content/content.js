@@ -1077,7 +1077,7 @@ class ContentScanner {
                     </div>
                 </div>
                 
-                <div class="file-list-preview" id="file-list-preview">
+                <div class="wdu-file-list-preview" id="file-list-preview">
                     <!-- 文件项会动态添加到这里 -->
                 </div>
                 
@@ -1149,7 +1149,11 @@ class ContentScanner {
     }
     
     addPreviewStyles() {
-        if (document.getElementById('web-download-preview-styles')) return;
+        // 移除现有样式以便更新
+        const existingStyles = document.getElementById('web-download-preview-styles');
+        if (existingStyles) {
+            existingStyles.remove();
+        }
         
         const styles = document.createElement('style');
         styles.id = 'web-download-preview-styles';
@@ -1605,7 +1609,7 @@ class ContentScanner {
                 box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
             }
             
-            .file-list-preview {
+            .wdu-file-list-preview {
                 flex: 1;
                 overflow-y: auto;
                 background: white;
@@ -1613,25 +1617,25 @@ class ContentScanner {
                 min-height: 200px;
             }
             
-            .file-list-preview::-webkit-scrollbar {
+            .wdu-file-list-preview::-webkit-scrollbar {
                 width: 6px;
             }
             
-            .file-list-preview::-webkit-scrollbar-track {
+            .wdu-file-list-preview::-webkit-scrollbar-track {
                 background: #f1f5f9;
                 border-radius: 3px;
             }
             
-            .file-list-preview::-webkit-scrollbar-thumb {
+            .wdu-file-list-preview::-webkit-scrollbar-thumb {
                 background: #cbd5e1;
                 border-radius: 3px;
             }
             
-            .file-list-preview::-webkit-scrollbar-thumb:hover {
+            .wdu-file-list-preview::-webkit-scrollbar-thumb:hover {
                 background: #94a3b8;
             }
             
-            .file-item-preview {
+            .wdu-file-item-preview {
                  border: 1px solid #e2e8f0;
                  border-radius: 8px;
                  background: white;
@@ -1640,13 +1644,13 @@ class ContentScanner {
                  margin-bottom: 12px;
              }
              
-             .file-item-preview:hover {
+             .wdu-file-item-preview:hover {
                  border-color: #4f46e5;
                  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
                  transform: translateY(-1px);
              }
              
-             .file-item-preview:last-child {
+             .wdu-file-item-preview:last-child {
                  margin-bottom: 0;
              }
              
@@ -1659,7 +1663,7 @@ class ContentScanner {
              }
              
              /* 图片卡片样式 */
-             .file-item-preview.image-card {
+             .wdu-file-item-preview.image-card {
                  margin-bottom: 0;
                  display: flex;
                  flex-direction: column;
@@ -1717,7 +1721,7 @@ class ContentScanner {
              .image-thumbnail img {
                  width: 100%;
                  height: 100%;
-                 object-fit: cover;
+                 object-fit: ${this.currentSettings?.imageCropMode || 'contain'};
              }
              
              .image-error {
@@ -1743,7 +1747,7 @@ class ContentScanner {
                  white-space: nowrap;
              }
              
-             .image-url {
+             .wdu-image-url {
                  font-size: 10px;
                  color: #64748b;
                  line-height: 1.2;
@@ -1815,7 +1819,7 @@ class ContentScanner {
              }
              
              /* 非图片文件列表样式 */
-             .file-item-preview.list-item {
+             .wdu-file-item-preview.list-item {
                  display: flex;
                  align-items: center;
                  padding: 12px 16px;
@@ -1841,14 +1845,14 @@ class ContentScanner {
              .file-thumbnail img {
                  width: 100%;
                  height: 100%;
-                 object-fit: cover;
+                 object-fit: ${this.currentSettings?.imageCropMode || 'contain'};
              }
             
-            .file-checkbox-preview {
+            .wdu-file-checkbox-preview {
                  flex-shrink: 0;
              }
             
-            .file-checkbox-preview input[type="checkbox"] {
+            .wdu-file-checkbox-preview input[type="checkbox"] {
                 appearance: none;
                 width: 14px;
                 height: 14px;
@@ -1859,12 +1863,12 @@ class ContentScanner {
                 transition: all 0.3s ease;
             }
             
-            .file-checkbox-preview input[type="checkbox"]:checked {
+            .wdu-file-checkbox-preview input[type="checkbox"]:checked {
                 background: #4f46e5;
                 border-color: #4f46e5;
             }
             
-            .file-checkbox-preview input[type="checkbox"]:checked::after {
+            .wdu-file-checkbox-preview input[type="checkbox"]:checked::after {
                 content: '✓';
                 position: absolute;
                 color: white;
@@ -1874,7 +1878,7 @@ class ContentScanner {
                 transform: translate(-50%, -50%);
             }
             
-            .file-info-preview {
+            .wdu-file-info-preview {
                 flex: 1;
                 display: flex;
                 align-items: center;
@@ -1882,7 +1886,7 @@ class ContentScanner {
                 min-width: 0;
             }
             
-            .file-type-icon-preview {
+            .wdu-file-type-icon-preview {
                 width: 20px;
                 height: 20px;
                 border-radius: 3px;
@@ -1895,24 +1899,24 @@ class ContentScanner {
                 flex-shrink: 0;
             }
             
-            .file-type-icon-preview.image {
+            .wdu-file-type-icon-preview.image {
                 background: #10b981;
             }
             
-            .file-type-icon-preview.video {
+            .wdu-file-type-icon-preview.video {
                 background: #f59e0b;
             }
             
-            .file-type-icon-preview.document {
+            .wdu-file-type-icon-preview.document {
                 background: #3b82f6;
             }
             
-            .file-details-preview {
+            .wdu-file-details-preview {
                 flex: 1;
                 min-width: 0;
             }
             
-            .file-name-preview {
+            .wdu-file-name-preview {
                 font-size: 14px;
                 color: #1e293b;
                 font-weight: 500;
@@ -1922,7 +1926,7 @@ class ContentScanner {
                 white-space: nowrap;
             }
             
-            .file-url-preview {
+            .wdu-file-url-preview {
                 font-size: 12px;
                 color: #64748b;
                 overflow: hidden;
@@ -1930,7 +1934,7 @@ class ContentScanner {
                 white-space: nowrap;
             }
             
-            .file-actions-preview {
+            .wdu-file-actions-preview {
                  display: flex;
                  flex-direction: column;
                  align-items: flex-end;
@@ -1938,7 +1942,7 @@ class ContentScanner {
                  flex-shrink: 0;
              }
              
-             .file-size-preview {
+             .wdu-file-size-preview {
                  font-size: 9px;
                  color: #64748b;
                  white-space: nowrap;
@@ -2156,7 +2160,7 @@ class ContentScanner {
                 margin-right: 4px;
             }
             
-            .file-list-preview.empty {
+            .wdu-file-list-preview.empty {
                  display: flex;
                  align-items: center;
                  justify-content: center;
@@ -2244,7 +2248,7 @@ class ContentScanner {
                      height: 50px;
                  }
                  
-                 .file-item-preview {
+                 .wdu-file-item-preview {
                      padding: 10px 12px;
                  }
                  
@@ -2569,12 +2573,12 @@ class ContentScanner {
         const filteredFiles = this.getFilteredPreviewFiles();
         
         if (filteredFiles.length === 0) {
-            fileList.className = 'file-list-preview empty';
+            fileList.className = 'wdu-file-list-preview empty';
             fileList.innerHTML = '<div>暂无符合条件的文件</div>';
             return;
         }
         
-        fileList.className = 'file-list-preview';
+        fileList.className = 'wdu-file-list-preview';
         
         // 分离图片和其他文件
         const imageFiles = filteredFiles.filter(file => file.type === 'image');
@@ -2704,14 +2708,14 @@ class ContentScanner {
         
         if (isImage) {
             // 图片卡片布局
-            item.className = 'file-item-preview image-card';
+            item.className = 'wdu-file-item-preview image-card';
             item.innerHTML = `
                 <div class="image-thumbnail" data-preview-url="${file.url}">
                     <img src="${file.url}" alt="${file.name}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=&quot;image-error&quot;>❌</div>'">
                 </div>
                 <div class="image-info">
                     <div class="image-name" title="${file.name || '未命名'}">${this.truncateText(file.name || '未命名', 12)}</div>
-                    <div class="image-url" title="${file.url}">${this.truncateUrl(file.url)}</div>
+                    <div class="wdu-image-url" title="${file.url}">${this.truncateUrl(file.url)}</div>
                     <div class="image-actions">
                         <div class="file-source-info">
                             <span class="file-source ${file.source || 'page'}">${this.getSourceText(file.source)}</span>
@@ -2730,25 +2734,25 @@ class ContentScanner {
             `;
         } else {
             // 非图片文件列表布局
-            item.className = 'file-item-preview list-item';
+            item.className = 'wdu-file-item-preview list-item';
             item.innerHTML = `
-                <div class="file-checkbox-preview">
+                <div class="wdu-file-checkbox-preview">
                     <input type="checkbox" ${isSelected ? 'checked' : ''} data-url="${file.url}">
                 </div>
-                <div class="file-info-preview">
-                    <div class="file-type-icon-preview ${file.type}">
+                <div class="wdu-file-info-preview">
+                    <div class="wdu-file-type-icon-preview ${file.type}">
                         ${this.getPreviewTypeIcon(file.type)}
                     </div>
-                    <div class="file-details-preview">
-                        <div class="file-name-preview" title="${file.name || '未命名'}">${this.truncateText(file.name || '未命名', 20)}</div>
-                        <div class="file-url-preview" title="${file.url}">${this.truncateUrl(file.url)}</div>
+                    <div class="wdu-file-details-preview">
+                        <div class="wdu-file-name-preview" title="${file.name || '未命名'}">${this.truncateText(file.name || '未命名', 20)}</div>
+                        <div class="wdu-file-url-preview" title="${file.url}">${this.truncateUrl(file.url)}</div>
                         <div class="file-source-badge">
                             <span class="file-source ${file.source || 'page'}">${this.getSourceText(file.source)}</span>
                             <span class="file-time">📅 ${file.timeString || '--:--'}</span>
                         </div>
                     </div>
-                    <div class="file-actions-preview">
-                        <div class="file-size-preview">${this.formatPreviewFileSize(file.size)}</div>
+                    <div class="wdu-file-actions-preview">
+                        <div class="wdu-file-size-preview">${this.formatPreviewFileSize(file.size)}</div>
                         ${file.type === 'video' ? `<button class="preview-btn" data-preview-url="${file.url}" data-preview-type="video" title="预览视频">👁️</button>` : ''}
                         <button class="copy-link-btn" data-copy-url="${file.url}" title="复制链接">📋</button>
                     </div>
@@ -2774,7 +2778,7 @@ class ContentScanner {
         });
         
         // 为复选框容器添加点击事件，确保点击复选框区域能触发选择
-        const checkboxContainer = item.querySelector('.image-checkbox, .file-checkbox-preview');
+        const checkboxContainer = item.querySelector('.image-checkbox, .wdu-file-checkbox-preview');
         if (checkboxContainer) {
             checkboxContainer.addEventListener('click', (e) => {
                 e.stopPropagation(); // 阻止事件冒泡到父元素

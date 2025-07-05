@@ -11,6 +11,7 @@ class WebDownloadHelper {
             downloadDelay: 0.5,
             zipThreshold: 3,
             showFormatFilter: false,
+            imageCropMode: 'contain',
             enableFormatConversion: false,
             targetFormat: 'jpg',
             conversionQuality: 0.8,
@@ -336,6 +337,7 @@ class WebDownloadHelper {
         document.getElementById('zip-threshold').value = this.settings.zipThreshold;
         document.getElementById('download-delay').value = this.settings.downloadDelay;
         document.getElementById('show-format-filter').checked = this.settings.showFormatFilter;
+        document.getElementById('image-crop-mode').value = this.settings.imageCropMode;
         
         // 更新格式转换UI
         document.getElementById('enable-format-conversion').checked = this.settings.enableFormatConversion;
@@ -366,6 +368,7 @@ class WebDownloadHelper {
         this.settings.zipThreshold = parseInt(document.getElementById('zip-threshold').value);
         this.settings.downloadDelay = parseFloat(document.getElementById('download-delay').value);
         this.settings.showFormatFilter = document.getElementById('show-format-filter').checked;
+        this.settings.imageCropMode = document.getElementById('image-crop-mode').value;
         
         // 从UI获取格式转换设置
         this.settings.enableFormatConversion = document.getElementById('enable-format-conversion').checked;
@@ -409,6 +412,7 @@ class WebDownloadHelper {
                 zipThreshold: 3,
                 downloadDelay: 0.5,
                 showFormatFilter: false,
+                imageCropMode: 'contain',
                 enableFormatConversion: false,
                 targetFormat: 'jpg',
                 conversionQuality: 0.8,
