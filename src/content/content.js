@@ -3082,7 +3082,14 @@ class ContentScanner {
             let allFiles = [];
             
             if (this.isXiaohongshuMode) {
-                // 小红书模式：只获取小红书专属文件
+                // 小红书模式：先获取设置，再获取小红书专属文件
+                const settings = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
+                });
+                
+                // 更新当前设置
+                this.currentSettings = settings;
+                
                 const xiaohongshuResult = await this.startXiaohongshuCapture(true);
                 if (xiaohongshuResult.success) {
                     allFiles = xiaohongshuResult.files || this.foundFiles;
@@ -4277,6 +4284,11 @@ class ContentScanner {
                 return { success: false, error: '请在小红书页面使用此功能' };
             }
             
+            // 获取当前设置
+            const settings = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
+            });
+            
             const files = [];
             const currentTime = new Date();
             
@@ -4367,7 +4379,7 @@ class ContentScanner {
                 return { success: true, count: files.length, files: files };
             } else {
                 // 正常模式：无论是否找到文件都显示预览面板
-                this.showPreviewPanel(files, [], {}, true, true);
+                this.showPreviewPanel(files, [], settings, true, true);
                 
                 if (files.length === 0) {
                     // 没有找到文件时也显示通知，但仍然显示预览面板
