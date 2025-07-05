@@ -726,6 +726,40 @@ class ContentScanner {
         return `${filename}.${extension}`;
     }
     
+    applyFileNamingRule(filename, index) {
+        // 获取当前设置，如果没有设置则使用默认的时间戳规则
+        const settings = this.currentSettings || { fileNaming: 'timestamp' };
+        
+        // 分离文件名和扩展名
+        const lastDotIndex = filename.lastIndexOf('.');
+        const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+        const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+        
+        // 根据命名规则生成新文件名
+        let newBaseName;
+        switch (settings.fileNaming) {
+            case 'timestamp':
+                const now = new Date();
+                const timestamp = now.getFullYear() + 
+                    String(now.getMonth() + 1).padStart(2, '0') + 
+                    String(now.getDate()).padStart(2, '0') + '_' +
+                    String(now.getHours()).padStart(2, '0') + 
+                    String(now.getMinutes()).padStart(2, '0') + 
+                    String(now.getSeconds()).padStart(2, '0');
+                newBaseName = `${timestamp}_${baseName}`;
+                break;
+            case 'sequential':
+                newBaseName = `${String(index + 1).padStart(3, '0')}_${baseName}`;
+                break;
+            case 'original':
+            default:
+                newBaseName = baseName;
+                break;
+        }
+        
+        return newBaseName + extension;
+    }
+    
     getEstimatedSize(element) {
         if (!element) return null;
         
@@ -3596,7 +3630,8 @@ class ContentScanner {
         const day = now.getDate().toString().padStart(2, '0');
         const hours = now.getHours().toString().padStart(2, '0');
         const minutes = now.getMinutes().toString().padStart(2, '0');
-        return `${year}${month}${day}_${hours}${minutes}`;
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     }
     
     copyCommandToClipboard(command, successMessage) {
@@ -4235,6 +4270,9 @@ class ContentScanner {
                         file.url,
                         file.type
                     );
+                    
+                    // 应用文件命名规则
+                    fileName = this.applyFileNamingRule(fileName, index);
                     
                     // 下载文件
                     const response = await fetch(file.url, {

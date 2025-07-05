@@ -234,7 +234,13 @@ class BackgroundService {
     
     generateFilename(file, settings, index) {
         const extension = this.getFileExtension(file.url) || this.getTypeExtension(file.type);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const now = new Date();
+        const timestamp = now.getFullYear() + 
+            String(now.getMonth() + 1).padStart(2, '0') + 
+            String(now.getDate()).padStart(2, '0') + '_' +
+            String(now.getHours()).padStart(2, '0') + 
+            String(now.getMinutes()).padStart(2, '0') + 
+            String(now.getSeconds()).padStart(2, '0');
         const baseName = file.name ? file.name.replace(/\.[^/.]+$/, '') : `file_${index}`;
         
         let finalName;
@@ -388,7 +394,7 @@ class BackgroundService {
     async getSettings() {
         const defaultSettings = {
             savePath: 'Downloads/WebDownUtils',
-            fileNaming: 'original',
+            fileNaming: 'timestamp',
             createFolders: true,
             autoDetectPlatform: true,
             maxFiles: 50,

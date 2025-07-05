@@ -2,49 +2,7 @@
 class WebDownloadHelper {
     constructor() {
         this.currentTab = null;
-        this.settings = {
-            savePath: 'Downloads/WebDownUtils',
-            fileNaming: 'original',
-            createFolders: true,
-            maxFiles: 50,
-            fileSizeLimit: 100,
-            downloadDelay: 0.5,
-            zipThreshold: 3,
-            showFormatFilter: false,
-            imageCropMode: 'contain',
-            enableFormatConversion: false,
-            targetFormat: 'jpg',
-            conversionQuality: 0.8,
-            formats: {
-                // 图片格式
-                jpg: true,
-                png: true,
-                gif: true,
-                webp: true,
-                svg: true,
-                // 视频格式
-                mp4: true,
-                webm: true,
-                avi: true,
-                mov: true,
-                mkv: true,
-                // 音频格式
-                mp3: true,
-                wav: true,
-                flac: true,
-                aac: true,
-                ogg: true,
-                m4a: true,
-                // 文档格式
-                pdf: true,
-                doc: true,
-                docx: true,
-                xls: true,
-                xlsx: true,
-                ppt: true,
-                pptx: true
-            }
-        };
+        this.configManager = new ConfigManager();
         this.init();
     }
     
@@ -58,6 +16,11 @@ class WebDownloadHelper {
     async getCurrentTab() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         this.currentTab = tab;
+    }
+    
+    // 获取兼容的settings对象
+    get settings() {
+        return this.configManager.getFlatConfig();
     }
     
     setupEventListeners() {
@@ -82,21 +45,24 @@ class WebDownloadHelper {
         const enableConversionCheckbox = document.getElementById('enable-format-conversion');
         if (enableConversionCheckbox) {
             enableConversionCheckbox.addEventListener('change', (e) => {
-                this.toggleConversionOptions(e.target.checked);
+                this.configManager.set('enableFormatConversion', e.target.checked);
+                this.configManager.toggleConversionOptions();
             });
         }
         
         const targetFormatSelect = document.getElementById('target-format');
         if (targetFormatSelect) {
             targetFormatSelect.addEventListener('change', (e) => {
-                this.updateQualityVisibility(e.target.value);
+                this.configManager.set('targetFormat', e.target.value);
+                this.configManager.updateQualityVisibility();
             });
         }
         
         const qualitySlider = document.getElementById('conversion-quality');
         if (qualitySlider) {
             qualitySlider.addEventListener('input', (e) => {
-                document.getElementById('quality-display').textContent = Math.round(e.target.value * 100) + '%';
+                this.configManager.set('conversionQuality', parseFloat(e.target.value));
+                this.configManager.updateQualityDisplay();
             });
         }
 
@@ -201,103 +167,112 @@ class WebDownloadHelper {
         this.updateProgress('开始下载...', 0, files.length);
         
         for (let i = 0; i < files.length; i++) {
-            const file = files[i];
             try {
-                await this.downloadSingleFile(file, i + 1);
-                this.updateProgress(`正在下载: ${file.name}`, i + 1, files.length);
+                await this.downloadSingleFile(files[i], i);
+                this.updateProgress(`下载中...`, i + 1, files.length);
             } catch (error) {
-                console.error(`下载文件失败: ${file.name}`, error);
+                console.error('文件下载失败:', error);
             }
         }
         
-        this.updateProgress('下载完成!', files.length, files.length);
-        setTimeout(() => {
-            this.hideProgress();
-        }, 2000);
+        this.hideProgress();
     }
     
     async downloadSingleFile(file, index) {
         const filename = this.generateFilename(file, index);
-        const savePath = this.settings.createFolders 
-            ? `${this.settings.savePath}/${this.getDomainName()}/${filename}`
-            : `${this.settings.savePath}/${filename}`;
         
-        return new Promise((resolve, reject) => {
-            chrome.downloads.download({
+        try {
+            await chrome.downloads.download({
                 url: file.url,
-                filename: savePath,
+                filename: filename,
                 conflictAction: 'uniquify'
-            }, (downloadId) => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                } else {
-                    resolve(downloadId);
-                }
             });
-        });
+        } catch (error) {
+            console.error('下载失败:', error);
+            throw error;
+        }
     }
     
     generateFilename(file, index) {
-        const originalName = file.name || `file_${index}`;
+        const domain = this.getDomainName();
+        const settings = this.settings;
+        let filename = file.name;
         
-        let finalName;
-        switch (this.settings.fileNaming) {
+        // 根据命名规则生成文件名
+        switch (settings.fileNaming) {
             case 'timestamp':
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                finalName = `${timestamp}_${originalName}`;
+                const now = new Date();
+                const timestamp = now.getFullYear() + 
+                    String(now.getMonth() + 1).padStart(2, '0') + 
+                    String(now.getDate()).padStart(2, '0') + '_' +
+                    String(now.getHours()).padStart(2, '0') + 
+                    String(now.getMinutes()).padStart(2, '0') + 
+                    String(now.getSeconds()).padStart(2, '0');
+                filename = `${timestamp}_${filename}`;
                 break;
             case 'sequential':
-                finalName = `${index.toString().padStart(3, '0')}_${originalName}`;
+                filename = `${String(index + 1).padStart(3, '0')}_${filename}`;
                 break;
+            case 'original':
             default:
-                finalName = originalName;
                 break;
         }
         
-        // 确保文件名有后缀，如果没有就添加合适的后缀
-        if (!this.hasFileExtension(finalName)) {
-            const extension = this.getFileExtension(file.url) || this.getTypeExtension(file.type);
-            finalName = `${finalName}.${extension}`;
+        // 如果没有文件扩展名，根据类型添加
+        if (!this.hasFileExtension(filename)) {
+            const ext = this.getFileExtension(file.url) || this.getTypeExtension(file.type);
+            if (ext) {
+                filename += '.' + ext;
+            }
         }
         
-        return finalName;
+        // 如果启用了按网站创建文件夹
+        if (settings.createFolders) {
+            filename = `${settings.savePath}/${domain}/${filename}`;
+        } else {
+            filename = `${settings.savePath}/${filename}`;
+        }
+        
+        return filename;
     }
     
     getDomainName() {
         try {
             const url = new URL(this.currentTab.url);
             return url.hostname.replace(/^www\./, '');
-        } catch {
+        } catch (error) {
             return 'unknown';
         }
     }
     
     hasFileExtension(filename) {
-        if (!filename) return false;
-        const parts = filename.split('.');
-        return parts.length > 1 && parts[parts.length - 1].length > 0;
+        return /\.[a-zA-Z0-9]+$/.test(filename);
     }
     
     getFileExtension(url) {
         try {
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const filename = pathname.split('/').pop();
-            if (filename && filename.includes('.')) {
-                return filename.split('.').pop();
-            }
-        } catch {}
-        return '';
+            const pathname = new URL(url).pathname;
+            const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
+            return match ? match[1] : null;
+        } catch (error) {
+            return null;
+        }
     }
     
     getTypeExtension(type) {
-        switch (type) {
-            case 'image': return 'jpg';
-            case 'video': return 'mp4';
-            case 'audio': return 'mp3';
-            case 'document': return 'pdf';
-            default: return 'file';
-        }
+        const typeMap = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'image/webp': 'webp',
+            'image/svg+xml': 'svg',
+            'video/mp4': 'mp4',
+            'video/webm': 'webm',
+            'video/avi': 'avi',
+            'video/quicktime': 'mov',
+            'video/x-msvideo': 'avi'
+        };
+        return typeMap[type] || null;
     }
     
     updateProgress(text, current, total) {
@@ -306,16 +281,21 @@ class WebDownloadHelper {
         const progressCount = document.getElementById('progress-count');
         const progressFill = document.getElementById('progress-fill');
         
-        progressSection.style.display = 'block';
-        progressText.textContent = text;
-        progressCount.textContent = `${current}/${total}`;
-        
-        const percentage = total > 0 ? (current / total) * 100 : 0;
-        progressFill.style.width = `${percentage}%`;
+        if (progressSection) {
+            progressSection.style.display = 'block';
+            progressText.textContent = text;
+            progressCount.textContent = `${current}/${total}`;
+            
+            const percentage = total > 0 ? (current / total) * 100 : 0;
+            progressFill.style.width = percentage + '%';
+        }
     }
     
     hideProgress() {
-        document.getElementById('progress-section').style.display = 'none';
+        const progressSection = document.getElementById('progress-section');
+        if (progressSection) {
+            progressSection.style.display = 'none';
+        }
     }
     
     showError(message) {
@@ -325,164 +305,42 @@ class WebDownloadHelper {
     }
     
     async loadSettings() {
-        const result = await chrome.storage.sync.get(this.settings);
-        this.settings = { ...this.settings, ...result };
-        
-        // 更新基础设置UI
-        document.getElementById('save-path').value = this.settings.savePath;
-        document.getElementById('file-naming').value = this.settings.fileNaming;
-        document.getElementById('create-folders').checked = this.settings.createFolders;
-        document.getElementById('max-files').value = this.settings.maxFiles;
-        document.getElementById('file-size-limit').value = this.settings.fileSizeLimit;
-        document.getElementById('zip-threshold').value = this.settings.zipThreshold;
-        document.getElementById('download-delay').value = this.settings.downloadDelay;
-        document.getElementById('show-format-filter').checked = this.settings.showFormatFilter;
-        document.getElementById('image-crop-mode').value = this.settings.imageCropMode;
-        
-        // 更新格式转换UI
-        document.getElementById('enable-format-conversion').checked = this.settings.enableFormatConversion;
-        document.getElementById('target-format').value = this.settings.targetFormat;
-        document.getElementById('conversion-quality').value = this.settings.conversionQuality;
-        document.getElementById('quality-display').textContent = Math.round(this.settings.conversionQuality * 100) + '%';
-        this.toggleConversionOptions(this.settings.enableFormatConversion);
-        this.updateQualityVisibility(this.settings.targetFormat);
-        
-        // 更新格式配置UI
-        if (this.settings.formats) {
-            Object.keys(this.settings.formats).forEach(format => {
-                const checkbox = document.getElementById(`format-${format}`);
-                if (checkbox) {
-                    checkbox.checked = this.settings.formats[format];
-                }
-            });
-        }
+        await this.configManager.loadFromStorage();
+        this.configManager.updateUI();
+        this.configManager.toggleConversionOptions();
     }
     
     async saveSettings() {
-        // 从UI获取基础设置
-        this.settings.savePath = document.getElementById('save-path').value;
-        this.settings.fileNaming = document.getElementById('file-naming').value;
-        this.settings.createFolders = document.getElementById('create-folders').checked;
-        this.settings.maxFiles = parseInt(document.getElementById('max-files').value);
-        this.settings.fileSizeLimit = parseInt(document.getElementById('file-size-limit').value);
-        this.settings.zipThreshold = parseInt(document.getElementById('zip-threshold').value);
-        this.settings.downloadDelay = parseFloat(document.getElementById('download-delay').value);
-        this.settings.showFormatFilter = document.getElementById('show-format-filter').checked;
-        this.settings.imageCropMode = document.getElementById('image-crop-mode').value;
+        // 从UI读取配置
+        this.configManager.readFromUI();
         
-        // 从UI获取格式转换设置
-        this.settings.enableFormatConversion = document.getElementById('enable-format-conversion').checked;
-        this.settings.targetFormat = document.getElementById('target-format').value;
-        this.settings.conversionQuality = parseFloat(document.getElementById('conversion-quality').value);
+        // 保存到存储
+        const success = await this.configManager.saveToStorage();
         
-        // 从UI获取格式配置
-        if (this.settings.formats) {
-            Object.keys(this.settings.formats).forEach(format => {
-                const checkbox = document.getElementById(`format-${format}`);
-                if (checkbox) {
-                    this.settings.formats[format] = checkbox.checked;
-                }
-            });
+        if (success) {
+            // 显示保存成功提示
+            const saveBtn = document.getElementById('save-settings');
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = '已保存!';
+            saveBtn.style.background = '#10b981';
+            
+            setTimeout(() => {
+                saveBtn.textContent = originalText;
+                saveBtn.style.background = '';
+            }, 1500);
+        } else {
+            this.showError('保存设置失败');
         }
-        
-        // 保存到Chrome存储
-        await chrome.storage.sync.set(this.settings);
-        
-        // 显示保存成功提示
-        const saveBtn = document.getElementById('save-settings');
-        const originalText = saveBtn.textContent;
-        saveBtn.textContent = '已保存!';
-        saveBtn.style.background = '#10b981';
-        
-        setTimeout(() => {
-            saveBtn.textContent = originalText;
-            saveBtn.style.background = '';
-        }, 1500);
     }
     
     async resetSettings() {
         if (confirm('确定要重置所有设置吗？')) {
-            // 重置为默认值
-            this.settings = {
-                savePath: 'Downloads/WebDownUtils',
-                fileNaming: 'original',
-                createFolders: true,
-                maxFiles: 50,
-                fileSizeLimit: 100,
-                zipThreshold: 3,
-                downloadDelay: 0.5,
-                showFormatFilter: false,
-                imageCropMode: 'contain',
-                enableFormatConversion: false,
-                targetFormat: 'jpg',
-                conversionQuality: 0.8,
-                formats: {
-                    // 图片格式
-                    jpg: true,
-                    png: true,
-                    gif: true,
-                    webp: true,
-                    svg: true,
-                    // 视频格式
-                    mp4: true,
-                    webm: true,
-                    avi: true,
-                    mov: true,
-                    mkv: true,
-                    // 音频格式
-                    mp3: true,
-                    wav: true,
-                    flac: true,
-                    aac: true,
-                    ogg: true,
-                    m4a: true,
-                    // 文档格式
-                    pdf: true,
-                    doc: true,
-                    docx: true,
-                    xls: true,
-                    xlsx: true,
-                    ppt: true,
-                    pptx: true
-                }
-            };
-            
-            // 清除存储的设置
-            await chrome.storage.sync.clear();
-            
-            // 更新UI
-            await this.loadSettings();
-            
+            await this.configManager.resetConfig();
+            this.configManager.updateUI();
+            this.configManager.toggleConversionOptions();
             alert('设置已重置');
         }
     }
-    
-    // 格式转换相关方法
-    toggleConversionOptions(enabled) {
-        const conversionOptions = document.getElementById('conversion-options');
-        const qualityOptions = document.getElementById('quality-options');
-        
-        if (conversionOptions) {
-            conversionOptions.style.display = enabled ? 'block' : 'none';
-        }
-        if (qualityOptions) {
-            qualityOptions.style.display = enabled ? 'block' : 'none';
-        }
-        
-        if (enabled) {
-            this.updateQualityVisibility(document.getElementById('target-format').value);
-        }
-    }
-    
-    updateQualityVisibility(format) {
-        const qualityOptions = document.getElementById('quality-options');
-        if (qualityOptions) {
-            // 只有JPG和WebP格式支持质量设置
-            const showQuality = format === 'jpg' || format === 'webp';
-            qualityOptions.style.display = showQuality ? 'block' : 'none';
-        }
-    }
-
 }
 
 // 小红书功能
